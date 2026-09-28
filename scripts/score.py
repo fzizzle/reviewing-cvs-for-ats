@@ -46,6 +46,12 @@ REQUIRED = ("experience", "education", "skills")
 NON_DATED = {"skills", "languages", "interests"}
 GARBLED = re.compile(r"(?<!\w)(?:[A-ZÀ-Ý] ){3,}[A-ZÀ-Ý](?!\w)")
 
+ROLE_WORDS = ("manager", "officer", "coordinator", "specialist", "director", "lead", "executive",
+              "consultant", "analyst", "supervisor", "administrator", "associate", "assistant",
+              "pilot", "representative", "engineer", "technician", "trainer", "teacher", "advisor",
+              "adviser", "head", "intern")
+ROLE_BLOCKLIST = re.compile(r"\b(?:" + "|".join(ROLE_WORDS) + r")\b", re.I)
+
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 INTL = re.compile(r"\+\d{1,3}[\s.-]?\(?\d")
 LINK = re.compile(r"linkedin\.com/|github\.com/|https?://|www\.", re.I)
@@ -65,6 +71,8 @@ def heading_key(line):
     s = line.strip()
     words = s.split()
     if not 1 <= len(words) <= 6 or ":" in s or s.endswith((".", ",", ";")):
+        return None
+    if ROLE_BLOCKLIST.search(s):
         return None
     for key, pat in SECTIONS.items():
         if re.search(pat, s, re.I):

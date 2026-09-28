@@ -51,3 +51,33 @@ def test_keyword_score_and_total():
     r = score.score_text(text, 1, keywords={"HubSpot": ["hubspot"], "SQL": ["sql"]})
     assert r["keywords"] == 17.5 and r["missing_keywords"] == ["SQL"]
     assert r["total"] == round(r["parse"] + 17.5, 1)
+
+
+def test_job_titles_are_not_headings():
+    assert score.heading_key("Skills Development Officer") is None
+    assert score.heading_key("PROJECT MANAGER") is None
+    assert score.heading_key("Formation Pilot") is None
+    assert score.heading_key("ENGINEERING PROJECTS") == "projects"
+    assert score.heading_key("WORK EXPERIENCE") == "experience"
+
+
+def test_line_wrap_variant_does_not_break_order():
+    a = score.section_sequence("EXPERIENCE\nProject Manager\nJan 2020 - Mar 2022\nEDUCATION\nBSc\nSKILLS\nPython")
+    b = score.section_sequence("EXPERIENCE\nProject Manager Jan 2020 - Mar 2022\nEDUCATION\nBSc\nSKILLS\nPython")
+    assert a == b == ["experience", "education", "skills"]
+
+
+def test_score_cv_zeroes_order_when_parsers_disagree(monkeypatch):
+    def fake_extract_all(path):
+        return ({"a": "EXPERIENCE\nEngineer\nEDUCATION\nBSc\nSKILLS\nPython",
+                 "b": "EDUCATION\nBSc\nEXPERIENCE\nEngineer\nSKILLS\nPython"}, 1)
+    monkeypatch.setattr(score, "extract_all", fake_extract_all)
+    rows = score.score_cv("dummy.txt")
+    assert rows["a"]["order"] == 0 and rows["b"]["order"] == 0
+
+
+def test_score_cv_full_order_when_parsers_agree(monkeypatch):
+    text = "EXPERIENCE\nEngineer\nEDUCATION\nBSc\nSKILLS\nPython"
+    monkeypatch.setattr(score, "extract_all", lambda path: ({"a": text, "b": text}, 1))
+    rows = score.score_cv("dummy.txt")
+    assert rows["a"]["order"] == 10 and rows["b"]["order"] == 10
