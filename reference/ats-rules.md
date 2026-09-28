@@ -1,0 +1,22 @@
+# ATS rules (layout) and how to read the local score
+
+| Rule | Why |
+|---|---|
+| Single column; no tables or text boxes for layout | Parsers read tables and columns in unpredictable order |
+| Contact details in the body, not a Word header/footer | Many ATS skip headers and footers (`cvats score` warns) |
+| Standard headings: Profile, Experience, Education, Projects, Skills, Languages | Parsers map sections by name |
+| Headings as real text with letter-spacing ≤ 0.04em | Wider spacing extracts as "E X P E R I E N C E" |
+| Dates inline with the employer line, not in a right-aligned column | Some parsers lift right-aligned text out as a block; dates land under a later section |
+| Dates as "Mon YYYY – Mon YYYY" / "Present" | Years-only dates hide the length of each role |
+| Job title on its own line, then "Employer · City · Dates" | Keeps title, employer and dates together |
+| Keywords in bullets as well as in Skills | Context beats keyword lists |
+| Text-based PDF (from HTML or Word), never scanned images | Images have no text to parse |
+| File name `Firstname_Lastname_CV.pdf` | Recruiters search by name |
+
+## Reading `cvats score`
+- It's a local heuristic. Always say "local ATS simulation", never "your ATS score".
+- Parse /65 is layout health: aim for ≥ 60 on every parser. A parser that disagrees with the others is the finding, so read `problems`.
+- Keywords /35 depend on the advert file. Write the file from the advert's requirements before scoring, then freeze it.
+- Don't chase 100. Missing keywords the person hasn't confirmed go in a "gaps to confirm" list, never into the CV.
+- Check scorer surprises by reading the extracted text (`cvats extract CV --out dir`) before trusting or dismissing them.
+- Don't upload a CV to online ATS checkers unless the person explicitly agrees. It's personal data sent to a third party.
