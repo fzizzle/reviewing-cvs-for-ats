@@ -40,6 +40,18 @@ def test_marker_line_is_not_an_orphan():
     assert layout.find_orphans([L(100, 50, 540, FULL), cur], right_edge=545) == []
 
 
+def test_mark_nearest_line_marks_only_the_closest_line():
+    # Two lines 8pt apart (tight spacing). A curve whose vertical midpoint is 2pt from line1's
+    # centre and 6pt from line2's centre must mark only line1 -- not every line whose window
+    # happens to contain the curve.
+    line1 = {"top": 100, "bottom": 108, "x0": 50, "x1": 200}  # centre 104
+    line2 = {"top": 108, "bottom": 116, "x0": 50, "x1": 150}  # centre 112
+    curve = {"x0": 40, "x1": 45, "top": 105, "bottom": 107}   # cy 106
+    layout.mark_nearest_line([line1, line2], [curve])
+    assert line1.get("marker") is True
+    assert not line2.get("marker")
+
+
 try:
     cvlib.find_chrome()
     HAVE_CHROME = True
@@ -84,6 +96,31 @@ MULTI_PAGE_MARGINS_HTML = """<!doctype html>
 browser justifies the first line to the full measure of the content box for an accurate margin
 test today.</p>
 </body></html>"""
+
+
+TIGHT_WRAPPED_LI_HTML = """<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.15; margin: 0; }
+  ul { margin: 0; padding: 0 0 0 14px; max-width: 300px; }
+  li { margin: 0; }
+</style></head><body>
+<ul>
+<li>Built contribution pages and pricing feeds for clients across London and worldwide</li>
+</ul>
+</body></html>"""
+
+
+@pytest.mark.skipif(not HAVE_CHROME, reason="needs Chrome/Chromium/Edge")
+def test_tight_spacing_still_finds_a_genuine_orphan(tmp_path):
+    # Repro: a single <li> at 10px/1.15 line-height (as in dense_cv.html) wraps, in a narrow
+    # column, to a genuine 2-word orphan last line. At this tight a line-top gap (~9pt) the old
+    # top..bottom "window" marker check matched the curve against BOTH the bullet's first line and
+    # its wrapped continuation, hiding the real orphan. Only the first line should get marker=True.
+    html = tmp_path / "cv.html"
+    html.write_text(TIGHT_WRAPPED_LI_HTML, encoding="utf-8")
+    pdf = cvlib.render_pdf(html, tmp_path / "cv.pdf")
+    assert len(layout.check(pdf)["orphans"]) == 1
 
 
 @pytest.mark.skipif(not HAVE_CHROME, reason="needs Chrome/Chromium/Edge")

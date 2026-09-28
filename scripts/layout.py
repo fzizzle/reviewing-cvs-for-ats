@@ -25,9 +25,12 @@ def page_lines(page):
     """Group a pdfplumber page's words into visual lines.
 
     Chrome renders <li> bullet glyphs as filled vector curves rather than text, so a line that
-    starts a list item is flagged with marker=True when a curve sits just left of it (curve x1 at
-    or before the line's x0, and the curve's vertical centre within the line's top..bottom, with
-    about 6pt of slack either way).
+    starts a list item is flagged with marker=True when a curve sits just left of it. Each curve is
+    assigned to exactly one line: the line to its right (curve x1 <= line x0) whose vertical centre
+    is nearest the curve's vertical midpoint, within 6pt. At tight line spacing a wrapped
+    continuation line can sit close enough that a naive top..bottom window would match it too, so
+    picking the single nearest line (rather than marking every line whose window contains the
+    curve) keeps the marker on the bullet's first line only.
     """
     words = sorted(page.extract_words(extra_attrs=["size"]), key=lambda w: (w["top"], w["x0"]))
     lines = []
@@ -42,12 +45,23 @@ def page_lines(page):
                           "size": w["size"], "words": [w]})
     for line in lines:
         line["text"] = " ".join(w["text"] for w in sorted(line["words"], key=lambda w: w["x0"]))
-    for curve in page.curves:
-        cy = (curve["top"] + curve["bottom"]) / 2
-        for line in lines:
-            if curve["x1"] <= line["x0"] and line["top"] - 6 <= cy <= line["bottom"] + 6:
-                line["marker"] = True
+    mark_nearest_line(lines, page.curves)
     return lines
+
+
+def mark_nearest_line(lines, curves, max_dist=6):
+    """Set marker=True on the single line nearest each curve's vertical midpoint (see page_lines)."""
+    for curve in curves:
+        cy = (curve["top"] + curve["bottom"]) / 2
+        best, best_dist = None, None
+        for line in lines:
+            if curve["x1"] > line["x0"]:
+                continue
+            dist = abs((line["top"] + line["bottom"]) / 2 - cy)
+            if dist <= max_dist and (best is None or dist < best_dist):
+                best, best_dist = line, dist
+        if best is not None:
+            best["marker"] = True
 
 
 def find_orphans(lines, right_edge, max_words=2, slack=40, gap_factor=1.55):

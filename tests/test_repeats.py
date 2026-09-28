@@ -74,3 +74,28 @@ def test_pdf_bullets_from_chrome_li_markers(tmp_path):
     pdf = cvlib.render_pdf(html, tmp_path / "cv.pdf")
     bullets, _ = repeats.load(pdf)
     assert repeats.repeated_openers(bullets) == {"led": 3}
+
+
+TIGHT_WRAPPED_LI_HTML = """<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 10px; line-height: 1.15; margin: 0; }
+  ul { margin: 0; padding: 0 0 0 14px; max-width: 300px; }
+  li { margin: 0; }
+</style></head><body>
+<ul>
+<li>Built contribution pages and pricing feeds for clients across London and worldwide</li>
+</ul>
+</body></html>"""
+
+
+@pytest.mark.skipif(not HAVE_CHROME, reason="needs Chrome/Chromium/Edge")
+def test_tight_spacing_wrapped_li_is_one_bullet_not_two(tmp_path):
+    # Repro: at tight line spacing (10px/1.15, as in dense_cv.html), a single wrapped <li> was
+    # split into two "bullets" because the old marker window matched the curve to both the
+    # bullet's first line and its wrapped continuation line.
+    html = tmp_path / "cv.html"
+    html.write_text(TIGHT_WRAPPED_LI_HTML, encoding="utf-8")
+    pdf = cvlib.render_pdf(html, tmp_path / "cv.pdf")
+    bullets, _ = repeats.load(pdf)
+    assert len(bullets) == 1
