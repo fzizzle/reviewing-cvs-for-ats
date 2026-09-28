@@ -14,6 +14,9 @@
 | Text-based PDF (from HTML or Word), never scanned images | Images have no text to parse |
 | File name `Firstname_Lastname_CV.pdf` | Recruiters search by name |
 
+## Building `kw.json`
+Format: `{"advert": "short label", "keywords": {"label": ["synonym", ...], ...}}` — see `templates/keywords-example.json`. Use 12–25 labels, one per distinct advert requirement. Keep every named tool or technology as its own label, even where the advert offers alternatives ("HubSpot or Salesforce Marketing Cloud") — an OR-merged label lets an unconfirmed tool hide behind a confirmed one in `missing_keywords` and skip the gaps list.
+
 ## Reading `cvats score`
 - It's a local heuristic. Always say "local ATS simulation", never "your ATS score".
 - Parse /65 is layout health: aim for ≥ 60 on every parser. A parser that disagrees with the others is the finding, so read `problems`.

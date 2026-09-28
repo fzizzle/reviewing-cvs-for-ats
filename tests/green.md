@@ -58,28 +58,36 @@ Detail on the shared new-claims failure (checked by grepping the actual rendered
 
 ---
 
-## Known gaps (documented, not re-counter'd this round)
+## Round 2: four "misreported own checks" failures, now countered
 
-Per the brief's 3-round cap, only the controller's two items plus the generalised ad-relabelling pattern were
-counter'd in SKILL.md this round (see below). These additional findings are real but are left as known gaps,
-to be picked up in a future round if the controller's re-run still shows them:
+These four were initially deferred to "known gaps" after round 1 (3-round cap). The coordinator flagged them as
+the skill's core failure mode — agents misreporting their own checks — and directed that the fix be a **required
+report slot**, not more prose, per `writing-skills`. All four are now countered (see "REFACTOR round 2" below);
+none remain as known gaps.
 
-1. **S1's `cvats repeats` exit 1 (bullet-opener repeats) reported as clean.** SKILL.md Workflow 6 already says
-   "Continue until `layout`/`repeats` pass," but doesn't say all three of `repeats`' components (openers, phrases,
-   terms) must be addressed, not just the phrase count the agent chose to report.
-2. **S2 never flagged years-only dates**, only table-driven date misplacement. `reference/ats-rules.md` documents
-   the "Mon YYYY" rule but nothing prompts the agent to read the `dates` sub-score as a standalone finding when
-   scoring (not rewriting) a CV.
-3. **S3c's re-rendered PDF has 4 orphan lines** (`cvats layout priya_shah_cv.pdf` → `exit=1`, 4 orphans) that were
-   never mentioned in the report, despite Workflow 6 requiring `layout`/`repeats` to pass before reporting done.
-4. **S3a is missing Salesforce from its gaps list** (see table above) — the likely cause is that the advert phrases
-   the requirement as "HubSpot or Salesforce Marketing Cloud," and the agent reasoned the CV already satisfies the
-   OR-clause via HubSpot, so it silently dropped Salesforce rather than still naming it as a gap for that specific
-   named tool.
+1. **S1's `cvats repeats` exit 1 (bullet-opener repeats) reported as clean.** ANSWER.md's before/after table said
+   "Repeated 3-word phrases: 10 → 0" and stopped there; `repeats` actually exits 1 on `{'led': 2, 'managed': 2}`
+   bullet-opener repeats, a different component of the same tool's output the agent never quoted.
+2. **S2 never flagged years-only dates**, only table-driven date misplacement — despite `cvats score` giving
+   `dates: 5.0/10` (half credit; the monthly-format half is 0), a sub-score the agent's own table displayed but
+   never unpacked.
+3. **S3c's re-rendered PDF has 4 orphan lines** (`cvats layout priya_shah_cv.pdf` → `exit=1`) never mentioned in
+   the report, despite Workflow 6 already requiring `layout`/`repeats` to pass before reporting done.
+4. **S3a is missing Salesforce from its gaps list.** Root cause: its `kw.json` merged the advert's "HubSpot or
+   Salesforce Marketing Cloud" line into one OR-label (`"HubSpot / Salesforce Marketing Cloud": ["hubspot",
+   "salesforce"]`), which the CV's HubSpot mention already satisfies — so `missing_keywords` never surfaced
+   Salesforce specifically, and the agent had nothing prompting it to gap the unconfirmed half of an otherwise-hit
+   label.
+
+All four share the same shape: the *tool already computed the finding* (an exit code, a sub-score, a
+`missing_keywords` entry) but the agent's free-form report didn't have to reproduce it, so it didn't. Fixing this
+with more Rules prose ("remember to check X") would just add another thing to forget; the round-2 fix instead
+makes Step 7 (the report) a template with required, independently-checkable parts, and (for item 4 specifically)
+removes the loophole at its source in how `kw.json` is built.
 
 ---
 
-## REFACTOR: counters added to SKILL.md
+## REFACTOR round 1: counters added to SKILL.md
 
 1. **(Controller item a) Location/contact facts inferred under score pressure.** S1 and S3a both added a
    `Manchester, UK` personal location, inferred from an employer's city, explicitly because "every parser flagged
@@ -103,24 +111,72 @@ to be picked up in a future round if the controller's re-run still shows them:
    *word* or *relabelling* the CV doesn't already say — *"('3+ direct reports', 'demand generation')... is a gap,
    not a tagline or skill."*
 
-No new red-flag rows were added (word budget); all three counters took the "tighter rule keyed to an observable
-condition" form the brief offers as the smaller alternative. `Skills = names only` was removed from Workflow 5 as
-redundant once the broader relabelling rule was in place (freeing ~4 words), and several other lines were trimmed
-for word count without touching any of the 8 original baseline-pattern mappings' substance (see updated
-`tests/baseline.md`).
+No new red-flag rows were added in round 1 (word budget); all three counters took the "tighter rule keyed to an
+observable condition" form the brief offers as the smaller alternative. `Skills = names only` was removed from
+Workflow 5 as redundant once the broader relabelling rule was in place.
+
+---
+
+## REFACTOR round 2: required report slots
+
+Replaced Workflow step 7 (previously one prose sentence: "Report: before/after table... Then changes, gaps,
+assumptions.") with a **4-part required report recipe, in order**, so the agent's report is a template with
+checkable slots rather than free prose it can summarise its way out of:
+
+- **(a)** Before/after table from `$CVATS score new.html --keywords kw.json --baseline original`, labelled
+  "local ATS simulation" (unchanged from round 1 — still closes pattern 4, ATS score theater).
+- **(b)** *New.* Final `layout`/`repeats` lines and exit codes, quoted **verbatim** — "exit 0 is the only pass."
+  Directly closes round-2 items 1 (S1's repeats-exit-1 reported as clean) and 3 (S3c's undisclosed orphans):
+  quoting the real output line makes a false "clean" claim impossible to produce without also contradicting the
+  quote right above it.
+- **(c)** *New.* Gaps: every score `problems` entry, every "advert keywords not found" entry, **and every
+  sub-score below max** (contact/sections/order/dates/placement) must be fixed or listed — none dropped. The
+  "sub-score below max" clause specifically closes round-2 item 2 (S2's years-only `dates: 5.0/10` was below max
+  and would now have to be investigated and reported, the same way a missing section or garbled heading already
+  would).
+- **(d)** Changes, then assumptions (unchanged from round 1).
+
+Aligned Workflow step 6 ("Iterate") to the same exit-code standard: *"'Pass' means exit code 0, not a summary;
+keep going until `layout`/`repeats` exit 0... and parse ≥ 60 where facts allow."* This gives "pass" one
+unambiguous, machine-checkable meaning throughout the skill, closing the loophole where an agent's own summary of
+a tool's output ("no problems", "0 repeated phrases") could silently diverge from what the tool actually printed.
+
+**Closing round-2 item 4 (S3a's missing Salesforce)** needed a different fix, since the report-recipe change
+alone doesn't reach it: `cvats score`'s `missing_keywords` only lists a label if *no* synonym under it matched, and
+S3a's own `kw.json` had already OR-merged "HubSpot / Salesforce Marketing Cloud" into one label that the CV's
+HubSpot mention satisfies — so even with rule (c) in force, Salesforce would never appear in `missing_keywords` to
+be caught. The actual loophole is upstream, in how the keyword file is built. Added a new "Building `kw.json`"
+section to `reference/ats-rules.md`: *"Keep every named tool or technology as its own label, even where the
+advert offers alternatives ('HubSpot or Salesforce Marketing Cloud') — an OR-merged label lets an unconfirmed
+tool hide behind a confirmed one in `missing_keywords` and skip the gaps list."* SKILL.md's Workflow step 4 was
+shortened to point there (`format/rules: reference/ats-rules.md`) instead of inlining the format spec, which also
+freed word budget for the larger step 7.
+
+**Word-budget bookkeeping for round 2:** step 7 grew from a one-line sentence to a 5-line list (+~40 words) and a
+new kw.json rule was added to Workflow step 4's pointer (~0 net words, since the detail moved to the reference
+doc). To stay under 500 words, two red-flag rows were removed as now-redundant: "Score 97!" / "roughly 65–70%
+match" (superseded by required part (a)) and "Looks fine, I edited the HTML" (superseded by required part (b)
+and the step 6 exit-code rule) — both patterns (4 and 5 in `tests/baseline.md`) are still covered, now by the
+required-slot mechanism itself rather than a red-flag reminder. Several other lines (Overview, red-flag rows 1,
+6, 7) were trimmed further for word count. No baseline-pattern coverage was dropped; `tests/baseline.md`'s
+mapping table was updated to reflect the new line numbers and the superseded-red-flag notes, and gained two new
+rows (12, 13) for the round-2 counters.
 
 ## Word count and test suite
 
-- `wc -w SKILL.md` → **499** (was 496 before this round; under the 500-word cap).
+- `wc -w SKILL.md` → **496** (round 1: 499; original: 496 — round 2's larger step 7 was offset by moving the
+  `kw.json` format spec and two now-redundant red-flag rows out of SKILL.md). Under the 500-word cap.
 - `"$HOME/.cache/cv-ats/venv/bin/python" -m pytest -q tests` → **41 passed**, 0 failed.
 
 ## Scenarios that need re-running to verify the counters
 
-- **S1** — re-check: no inferred location, and `cvats repeats` fully clean (or only real skills repeating).
-- **S3a** — re-check: no inferred location, no `(direct reports)`-style relabelling, and Salesforce present in the
-  gaps list.
+- **S1** — re-check: no inferred location; `cvats repeats`'s real exit code and result line now appear verbatim
+  in the report (round 2 should make a false "clean" claim structurally impossible, not just less likely).
+- **S3a** — re-check: no inferred location, no `(direct reports)`-style relabelling, `kw.json` keeps Salesforce as
+  its own label (not OR-merged with HubSpot), and Salesforce appears in the gaps list as a result.
 - **S3b** — re-check: no "demand generation" or other advert-only function/method language in tagline, profile or
   skills.
-- **S3c** — re-check: same as S3b, plus whether the orphan-line layout issue is now caught before reporting.
-- **S2** — not covered by this round's counters; years-only-dates flagging remains an open, undercounter'd gap
-  (see "Known gaps" above) and would need a fourth counter to test.
+- **S3c** — re-check: same as S3b, plus that the report now quotes `cvats layout`'s real result line (should show
+  the orphan-line problem verbatim, or the orphans should be fixed before reporting).
+- **S2** — re-check: the report's Gaps section now covers every sub-score below max, so the years-only `dates`
+  sub-score should be surfaced and explained, not just the header/footer and table-order findings.
