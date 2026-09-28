@@ -3,7 +3,8 @@
 
 Reports (1) bullets that open with the same word (label prefixes such as "Forecasting:" are skipped),
 (2) 3-word content phrases used more than once, (3) --terms used more than once.
-Bullets: <li> in .html; list paragraphs in .docx; lines starting with •, -, *, ▪ in .pdf/.txt/.md.
+Bullets: <li> in .html; in .docx, paragraphs (tables included) with a List style, Word numbering or a
+typed •/-/* glyph; lines starting with •, -, *, ▪ (or a drawn <li> marker) in .pdf/.txt/.md.
 Exit code 1 when anything repeats.
 
 Usage: cvats repeats CV [--terms "Acme,Oxford,SAMPE"] [--allow "python,sql"]
@@ -16,7 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import PDF_PARSERS  # noqa: E402
+from cvlib import PDF_PARSERS, docx_text  # noqa: E402
 
 MONTHS = ("jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july "
           "august september october november december present current janv févr fevr mars avr mai juin "
@@ -72,9 +73,20 @@ def load(path):
         return h.bullets, "".join(h.chunks)
     if ext == ".docx":
         import docx
+        from docx.oxml.ns import qn
+        from docx.text.paragraph import Paragraph
         d = docx.Document(str(p))
-        bullets = [para.text for para in d.paragraphs if "List" in para.style.name and para.text.strip()]
-        return bullets, "\n".join(para.text for para in d.paragraphs)
+        bullets = []
+        for el in d.element.body.iter(qn("w:p")):  # includes paragraphs inside table cells
+            para = Paragraph(el, d)
+            text = para.text
+            if not text.strip():
+                continue
+            ppr = el.pPr
+            numbered = ppr is not None and ppr.numPr is not None
+            if "List" in para.style.name or numbered or BULLET.match(text):
+                bullets.append(BULLET.sub("", text))
+        return bullets, docx_text(p)
     if ext == ".pdf":
         # Chrome renders <li> markers as filled vector curves, not the bullet glyphs a text-only
         # scan looks for, so a PDF made from an <ul>/<li> CV would otherwise show zero bullets.
@@ -123,8 +135,9 @@ def main(argv=None):
     ap.add_argument("--allow", default="", help="comma-separated words allowed to repeat (e.g. skills)")
     a = ap.parse_args(argv)
     bullets, text = load(a.cv)
-    if Path(a.cv).suffix.lower() == ".pdf" and not bullets:
-        print("warning: no bullets detected in this PDF — run repeats on the source .html/.docx to check bullet openers")
+    if not bullets:
+        hint = " — run repeats on the source .html/.docx to check bullet openers" if a.cv.lower().endswith(".pdf") else ""
+        print(f"warning: no bullets detected, so bullet openers were not checked{hint}")
     openers = repeated_openers(bullets)
     phrases = repeated_phrases(text, allow=[w for w in a.allow.split(",") if w])
     terms = {t: c for t, c in term_counts(text, [t.strip() for t in a.terms.split(",") if t.strip()]).items() if c > 1}

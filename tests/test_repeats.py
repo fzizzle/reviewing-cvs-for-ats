@@ -99,3 +99,68 @@ def test_tight_spacing_wrapped_li_is_one_bullet_not_two(tmp_path):
     pdf = cvlib.render_pdf(html, tmp_path / "cv.pdf")
     bullets, _ = repeats.load(pdf)
     assert len(bullets) == 1
+
+
+MANAGED = ["Managed weekly stock count for the ward pharmacy.",
+           "Managed rota changes for twelve healthcare assistants.",
+           "Managed weekly stock count audits with the matron."]
+
+
+def _docx_table_list_bullets(path):
+    import docx
+    d = docx.Document()
+    d.add_paragraph("Experience")
+    cell = d.add_table(rows=1, cols=1).cell(0, 0)
+    cell.paragraphs[0].text = MANAGED[0]
+    cell.paragraphs[0].style = d.styles["List Bullet"]
+    for text in MANAGED[1:]:
+        cell.add_paragraph(text, style="List Bullet")
+    d.save(path)
+    return path
+
+
+def _docx_typed_glyphs(path):
+    import docx
+    d = docx.Document()
+    for text in MANAGED:
+        d.add_paragraph("• " + text)  # Normal style, glyph typed by hand
+    d.save(path)
+    return path
+
+
+def _docx_numpr_normal(path):
+    import docx
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    d = docx.Document()
+    for text in MANAGED:
+        para = d.add_paragraph(text)  # Normal style, but numbered via direct formatting
+        num_pr = OxmlElement("w:numPr")
+        for tag, val in (("w:ilvl", "0"), ("w:numId", "1")):
+            el = OxmlElement(tag)
+            el.set(qn("w:val"), val)
+            num_pr.append(el)
+        para._p.get_or_add_pPr().append(num_pr)
+    d.save(path)
+    return path
+
+
+@pytest.mark.parametrize("build", [_docx_table_list_bullets, _docx_typed_glyphs, _docx_numpr_normal])
+def test_docx_bullets_in_tables_typed_glyphs_and_numpr(tmp_path, build):
+    # Repro: load() only looked at top-level paragraphs with a "List" style, so bullets in a table
+    # cell, typed "• " bullets and numPr-numbered Normal paragraphs all read as zero bullets (a false pass).
+    bullets, _ = repeats.load(build(tmp_path / "cv.docx"))
+    assert repeats.repeated_openers(bullets) == {"managed": 3}
+
+
+def test_docx_table_cell_text_is_checked_for_phrases(tmp_path):
+    _, text = repeats.load(_docx_table_list_bullets(tmp_path / "cv.docx"))
+    phrases = repeats.repeated_phrases(text)
+    assert "managed weekly stock" in phrases and "weekly stock count" in phrases
+
+
+def test_zero_bullet_warning_for_every_format(tmp_path, capsys):
+    f = tmp_path / "cv.txt"
+    f.write_text("Experience\n" + " ".join(f"word{i}" for i in range(40)) + "\n", encoding="utf-8")
+    repeats.main([str(f)])
+    assert "warning: no bullets detected" in capsys.readouterr().out
