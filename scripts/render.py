@@ -8,9 +8,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import page_count, render_pdf  # noqa: E402
+from cvlib import cli, page_count, render_pdf  # noqa: E402
 
 
+@cli
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("html")

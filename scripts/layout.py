@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import as_pdf  # noqa: E402
+from cvlib import NO_TEXT, as_pdf, cli  # noqa: E402
 
 BULLET_GLYPHS = ("•", "▪", "‣", "◦", "-", "–", "*")
 MM_PER_PT = 25.4 / 72
@@ -92,7 +92,7 @@ def check(pdf_path, max_pages=2, min_body_pt=9.5):
                               min(l["top"] for l in lines), page.height - max(l["bottom"] for l in lines),
                               page.height, page.width))
     if not boxes:
-        raise ValueError(f"{pdf_path} has no extractable text (scanned image?)")
+        raise ValueError(NO_TEXT)
     # Margins: left/right are the tightest indent seen on ANY page (a short page 1 must not look
     # like it has a wide margin just because its own lines didn't reach as far as later pages').
     left = min(b[0] for b in boxes)
@@ -120,6 +120,7 @@ def check(pdf_path, max_pages=2, min_body_pt=9.5):
     return report
 
 
+@cli
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cv")
@@ -129,8 +130,7 @@ def main(argv=None):
     with tempfile.TemporaryDirectory() as work:
         pdf = as_pdf(a.cv, work)
         if pdf is None:
-            print("layout needs a .pdf or .html CV")
-            return 2
+            raise ValueError("layout needs a .pdf or .html CV")
         r = check(pdf, a.max_pages, a.min_body_pt)
     print(f"pages: {r['pages']}  body: {r['body_pt']}pt  smallest: {r['min_pt']}pt  margins(mm): {r['margins_mm']}")
     print(f"bottom of last page empty: {r['last_page_empty_pct']}%")

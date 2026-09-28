@@ -9,9 +9,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import docx_header_footer_text, extract_all  # noqa: E402
+from cvlib import cli, docx_header_footer_text, extract_all  # noqa: E402
 
 
+@cli
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cv")

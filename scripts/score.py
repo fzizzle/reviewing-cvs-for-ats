@@ -26,7 +26,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import docx_header_footer_text, extract_all, normalise  # noqa: E402
+from cvlib import MIN_WORDS, NO_TEXT, cli, docx_header_footer_text, extract_all, normalise  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
@@ -196,7 +196,8 @@ def table(title, rows):
 
 
 def problems(rows):
-    out = []
+    empty = [name for name, r in rows.items() if r["words"] < MIN_WORDS]
+    out = [f"- {NO_TEXT} ({', '.join(empty)})"] if empty else []
     for name, r in rows.items():
         if r["missing_sections"]:
             out.append(f"- {name}: section headings not recognised: {', '.join(r['missing_sections'])}")
@@ -219,6 +220,7 @@ def problems(rows):
     return out
 
 
+@cli
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cv")

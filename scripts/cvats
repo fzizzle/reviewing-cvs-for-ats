@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # CV ATS toolkit. Usage: cvats <render|extract|score|repeats|layout> [args]   (each supports --help)
+# Exit codes: 0 clean, 1 a check found problems, 2 bad input (reported on stderr as "cvats: error: ...").
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV="${CV_ATS_VENV:-$HOME/.cache/cv-ats/venv}"

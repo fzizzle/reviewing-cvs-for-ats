@@ -17,7 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import PDF_PARSERS, docx_text  # noqa: E402
+from cvlib import MIN_WORDS, NO_TEXT, PDF_PARSERS, cli, docx_text  # noqa: E402
 
 MONTHS = ("jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july "
           "august september october november december present current janv févr fevr mars avr mai juin "
@@ -128,6 +128,7 @@ def term_counts(text, terms):
     return {t: len(re.findall(r"(?<!\w)" + re.escape(t) + r"(?!\w)", text, re.I)) for t in terms}
 
 
+@cli
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cv")
@@ -135,6 +136,8 @@ def main(argv=None):
     ap.add_argument("--allow", default="", help="comma-separated words allowed to repeat (e.g. skills)")
     a = ap.parse_args(argv)
     bullets, text = load(a.cv)
+    if len(re.findall(r"\w+", text)) < MIN_WORDS:
+        raise ValueError(NO_TEXT)
     if not bullets:
         hint = " — run repeats on the source .html/.docx to check bullet openers" if a.cv.lower().endswith(".pdf") else ""
         print(f"warning: no bullets detected, so bullet openers were not checked{hint}")

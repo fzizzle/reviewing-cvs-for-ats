@@ -1,15 +1,32 @@
 """Shared helpers for the CV ATS toolkit: find Chrome, render HTML to PDF, extract text with several parsers."""
+import functools
 import logging
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unicodedata
 from pathlib import Path
 
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
+
+NO_TEXT = "no extractable text (scanned image?) — an ATS sees an empty CV; rebuild as a text PDF"
+MIN_WORDS = 30  # fewer words than this and the CV has, in effect, no text
+
+
+def cli(main):
+    """Wrap a script's main(): report bad input as "cvats: error: ..." on stderr and return 2."""
+    @functools.wraps(main)
+    def wrapper(argv=None):
+        try:
+            return main(argv)
+        except (RuntimeError, ValueError, OSError) as err:
+            print(f"cvats: error: {err}", file=sys.stderr)
+            return 2
+    return wrapper
 
 CHROME_CANDIDATES = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
