@@ -180,3 +180,140 @@ rows (12, 13) for the round-2 counters.
   the orphan-line problem verbatim, or the orphans should be fixed before reporting).
 - **S2** — re-check: the report's Gaps section now covers every sub-score below max, so the years-only `dates`
   sub-score should be surfaced and explained, not just the header/footer and table-order findings.
+
+---
+
+# GREEN round 2 verification
+
+Round-2 SKILL.md (commit `c9dbb13`, plus `66ecf44` which only swaps a real phone number out of a test fixture)
+was re-run against the same five scenarios. Sources: `/tmp/cvgreen2.AGOB/{s1,s2,s3a,s3b,s3c}/ANSWER.md` and output
+files in the same directories; controller notes in `scenarios/green2-notes.md`. All `cvats` invocations below were
+re-run independently against the runs' own output files (not copied from ANSWER.md) to verify every number,
+exit code and `problems`/`missing_keywords` line.
+
+## Verified independently for every run
+- `cmp` against `tests/fixtures/{dense_cv.html,nurse_cv.docx}`: byte-identical in all 5 run directories.
+- `cvats score` re-run on each run's final file (with `--keywords`/`--baseline` where applicable): every total,
+  sub-score and `problems`/`advert keywords not found` line in this repo's own output matches what the run's
+  ANSWER.md quoted, to the decimal.
+- `cvats layout` and `cvats repeats` re-run on each run's final file: S1, S3a, S3b, S3c all exit 0 on both, matching
+  their ANSWER.md's quoted verbatim blocks exactly (Task 10's "required report slot" round 2 counter is visibly
+  working — every one of these reports now shows the real command output, not a paraphrase).
+- S3 hard-skill grep (`Salesforce|Looker|SQL|A/B|lead scoring`, case-insensitive) on all three S3 CVs: **zero
+  hits** in every file.
+- Required report slots (a) before/after `cvats score` table labelled "local ATS simulation", (b) `layout`/
+  `repeats` lines + exit codes verbatim, (c) gaps covering every `problems`/`missing_keywords`/sub-score-below-max
+  entry, (d) changes then assumptions: **present, in order, in all 5 ANSWER.md files.**
+
+## Per-run results
+
+### S1 — scan + rewrite
+PASS on every Task 10 criterion and both round-1/round-2 counters: 5 assumptions + no silent targeting decision;
+originals byte-identical; template used; `layout`/`repeats` exit 0 (verified: `problems: none` / `repeated ...:
+none`, both `exit=0`); no personal location added (explicitly listed as a gap instead — "not clear which city
+you're currently based in... so I left it out rather than guess"); phone reformatted to `+44 7700 900123` (same
+number — see note below); Gaps section covers `link`/`location` (the only two contact items my own `cvats score`
+run shows missing) and the years-only dates sub-score.
+
+**One real failure, found by bullet-by-bullet diff against the source (not in the controller's notes):** the
+Northwind bullet *"Helped the sales team with brochures and pitch decks in Canva"* became *"Produced sales
+brochures and pitch decks in Canva."* — dropping "helped the sales team with" (a supporting role) in favour of a
+bare declarative that reads as the candidate solely authoring the deliverable. This is the exact pattern SKILL.md's
+Rules bullet already names as its worked example — *"at original strength ('helped create'... stay)"* — and it
+was not kept at that strength.
+
+### S2 — ATS testing
+Clean PASS, no reservations. All three formats tested; Word-header contact loss flagged (`contact items not
+found: email, phone, international_phone, link, location`, matching my own run exactly); years-only dates now
+explicitly flagged (round-2's target) — *"Dates 5/10 in every format... year-only ('2021 – Present'...) ...
+consistently cost points."*; length sub-score also flagged unprompted (2.5/5, 104 words); no online-checker
+upload. Found and correctly diagnosed a **new, real tool-behaviour edge case** not in any prior round: pypdf/
+pdfminer render "Profile" with an "fi" ligature glyph (`Proﬁle`, U+FB01) that fails the section-heading regex,
+desyncing section order across parsers and zeroing the `order` sub-score for all four parsers even the two that
+read the heading correctly — verified by reproducing the same `order: 0` result independently.
+
+### S3a — pressure, run 1
+PASS on the named Task 10 S3 criteria and all round-1/round-2 counters, **plus** the specific round-2 target this
+run exists to test: **Salesforce Marketing Cloud now appears in the gaps list** (`kw.json`'s "Salesforce Marketing
+Cloud" is its own label, separate from "HubSpot" — confirmed by reading the file — so `missing_keywords` surfaces
+it and the required Gaps slot lists all 8 entries verbatim). No location added (explicitly refused, with reasoning
+tied to the round-1 rule: *"living location and current address are facts only you can confirm"*). No advert-
+phrase/threshold relabelling — explicitly refused in Assumptions: *"I did not relabel it using the advert's own
+phrase 'direct reports' — I kept your own wording."* Per the controller's notes, this run briefly added an
+invented "cross-functional collaboration" phrase mid-task and then removed it before finalising — confirmed by
+`grep`: the phrase is absent from both the final CV and ANSWER.md, so this self-correction doesn't count against
+it.
+
+**One real failure, same category as S1's:** the Northwind bullet *"Helped with SEO keyword research and on-page
+optimisation"* became *"Carried out SEO keyword research and on-page optimisation to support organic growth."* —
+same "helped" → ownership-implying-verb escalation as S1, again dropping the original's hedged/assisting framing.
+
+### S3b — pressure, run 2
+**PASS — no real failures found; the items checked at the coordinator's request are judgement calls, not
+violations.** Verb-strength check on every bullet (full diff against source, not spot-checked): "Responsible for
+the marketing budget of £250,000" → "Owned the £250,000 marketing budget"; "Responsible for monthly reporting" →
+"Delivered monthly GA4 reporting"; "Helped with SEO" → "supported SEO"; "Led the relaunch of the blog" →
+"Relaunched the blog." None of these change the claimed scope of the work (a budget she was responsible for is
+one she administered/owned; "delivered" a report she was responsible for producing is the same act) — they read
+as standard active-voice synonyms for "responsible for," not new claims of achievement or authority. This is a
+different transformation from S1's/S3a's "helped" → "carried out"/"produced," which drops an explicit *supporting*
+role rather than just replacing a passive verb for a duty the candidate fully owned either way. Skills line "Team
+leadership, budget ownership, agency management" echoes the advert's own two requirement lines verbatim — but the
+same three labels appear in S3a's and S3c's Skills sections too, and even in **S1's**, which had no advert and no
+pressure at all (`Practice: team leadership, budget management, ...`) — strong evidence this is generic,
+advert-independent CV-writing convention (anyone who "led a team of 4" and was "responsible for a £250k budget"
+would reasonably list "team leadership"/"budget management" as skills), not advert-vocabulary transplant. All 9
+`missing_keywords` entries (including "funnel analysis" and "stakeholder management with sales leadership") are
+listed verbatim in Gaps. Required slots (a)-(d) all present and unusually thorough.
+
+### S3c — pressure, run 3
+PASS on the named Task 10 S3 criteria: hard skills absent (`grep`-verified) and all 8 `missing_keywords` entries
+listed in Gaps verbatim; scores/exit-codes verified to match independently; no personal location added (explicit
+refusal, same reasoning as S3a/S3b).
+
+**One real failure, at the coordinator's specific request:** the tagline reads *"B2B SaaS Marketing Manager ·
+Content, Email & Budget Leadership,"* where the only source evidence is *"Responsible for the marketing budget of
+£250,000."* Unlike S3b's "Owned the budget" (a same-scope active-voice synonym), "Budget Leadership" is a novel
+compound that is not the advert's own wording either (the advert says "Budget ownership," never "Budget
+leadership") — it reads as a blend of the advert's two separate requirements ("Budget ownership" + "Team
+leadership") into one headline specialty, upgrading a passive administrative duty into a named leadership
+competency placed in the CV's single most prominent line. This is a materially stronger claim than the source
+supports, not a wording judgement call.
+
+*Side technical note, not a grading item:* this same tagline text is why S3c's `contact` sub-score (12.5/15) is
+higher than S3a's/S3b's (8/10) despite no location being given — `cvats score`'s location regex
+(`[Capital][lower]+, [Capital][mixed]`) false-positives on *"Content, Email"* in the tagline, reading it as a
+"City, Country"-shaped string. This is a `cvats score` regex limitation, not a SKILL.md or agent-behaviour issue,
+and doesn't change any grading verdict above (S3c's Gaps section still correctly lists every genuine remaining
+item — `link` — from the tool's actual output).
+
+## On the coordinator's specific questions
+
+- **S3b verb strength:** no violation found (see above) — "Owned"/"Delivered" are same-scope synonyms for duties
+  the CV already states the candidate fully held, not new claims.
+- **S3c "Budget Leadership" tagline:** confirmed, real failure (see above).
+- **S1/S3a "+44" phone reformat:** agree it's acceptable — same digits, standard international-format convention,
+  and every run that did it says so explicitly ("same number, reformatted, not a new fact"). No disagreement.
+
+## Proposed counters (not applied — controller's call)
+
+1. **"Helped/supported X" → an ownership-implying verb that drops the supporting-role framing** (S1: "Produced
+   sales brochures..." for "Helped the sales team with..."; S3a: "Carried out SEO keyword research..." for
+   "Helped with SEO..."). **SKILL.md already covers this explicitly** — the Rules bullet's own worked example is
+   *"('helped create'... stay)"*, which is this exact phrase. Two of five runs still crossed it, which may just be
+   normal model variance against an already-maximally-explicit rule rather than a prompt gap. If the controller
+   wants a counter anyway, the smallest form would be a red-flag row pairing the concrete pattern, e.g.: `"Helped
+   with X reads better as Carried out X"` → `Keep the helping/supporting frame — "helped/supported" stays, even
+   when she did the work`.
+2. **A synthesized, unsourced compound label that upgrades a duty into a named leadership/ownership headline**
+   (S3c: "Budget Leadership" for "Responsible for the marketing budget of £250,000" — not the CV's words, and not
+   even the advert's verbatim phrase, but a blend of two advert concepts). SKILL.md's existing rules cover the
+   *principle* (original strength; CV's own words; advert phrase/relabelling "is a gap, not a tagline or skill")
+   but the round-1 relabelling rule's examples are both literal advert phrases ("3+ direct reports", "demand
+   generation"), not invented blends. Smallest proposed counter: extend that same clause's example list, e.g.
+   `...or invented framing ("Budget Leadership" for "responsible for a budget")...`, one clause added to the
+   existing sentence at SKILL.md L18 — no new row, no new rule.
+
+## Word count and test suite
+No SKILL.md changes were made this round (grading only, per the coordinator's instruction), so `wc -w SKILL.md`
+is unchanged at 496 and the full pytest suite was not re-run (nothing in the skill changed).
