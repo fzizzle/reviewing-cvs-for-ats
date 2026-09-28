@@ -20,10 +20,11 @@ import argparse
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import docx_header_footer_text, extract_all  # noqa: E402
+from cvlib import docx_header_footer_text, extract_all, normalise  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
@@ -61,7 +62,7 @@ COLS = ["total", "parse", "keywords", "contact", "sections", "order", "dates", "
 
 
 def keyword_hits(text, keywords):
-    low = text.lower()
+    low = unicodedata.normalize("NFKC", text).lower()
     return {label: any(re.search(r"(?<!\w)" + re.escape(s.lower()), low) for s in syns)
             for label, syns in keywords.items()}
 
@@ -154,10 +155,13 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
 
 def score_cv(path, keywords=None, max_pages=2):
     texts, pages = extract_all(path)
+    texts = normalise(texts)  # idempotent; keeps extract_all's ligature counts
     expected = max(len(RANGE.findall(t)) for t in texts.values()) or 1
     consistent = len({tuple(section_sequence(t)) for t in texts.values()}) == 1
     rows = {n: score_text(t, pages, keywords=keywords, expected_dates=expected,
                           order_consistent=consistent, max_pages=max_pages) for n, t in texts.items()}
+    for n, r in rows.items():
+        r["ligatures"] = texts.ligatures.get(n, 0)
     if str(path).lower().endswith(".docx") and docx_header_footer_text(path):
         for r in rows.values():
             r["header_footer_text"] = docx_header_footer_text(path)
@@ -184,6 +188,9 @@ def problems(rows):
             out.append(f"- {name}: parsers disagree on section order: {r['sequence']}")
         if r["missing_contact"]:
             out.append(f"- {name}: contact items not found: {', '.join(r['missing_contact'])}")
+        if r.get("ligatures"):
+            out.append(f"- parser {name} extracted ligature glyphs ({r['ligatures']}, e.g. one glyph for 'fi'); "
+                       "add font-variant-ligatures: none")
     first = next(iter(rows.values()))
     if first.get("header_footer_text"):
         out.append(f"- Word header/footer holds text many ATS skip: {first['header_footer_text']!r}")

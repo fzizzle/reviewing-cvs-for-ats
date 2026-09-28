@@ -24,6 +24,13 @@ def test_docx_header_text_is_reported(tmp_path):
     assert "jordan.lee@example.com" not in cvlib.extract_all(path)[0]["python-docx"]
 
 
+def test_extract_all_normalises_and_counts_ligatures(tmp_path):
+    f = tmp_path / "cv.txt"
+    f.write_text("Certi\ufb01ed o\ufb03ce", encoding="utf-8")
+    texts, _ = cvlib.extract_all(f)
+    assert texts == {"text": "Certified office"} and texts.ligatures == {"text": 2}
+
+
 def test_unsupported_format(tmp_path):
     f = tmp_path / "cv.odt"
     f.write_text("x")

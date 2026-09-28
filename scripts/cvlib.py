@@ -1,10 +1,12 @@
 """Shared helpers for the CV ATS toolkit: find Chrome, render HTML to PDF, extract text with several parsers."""
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 logging.getLogger("pdfminer").setLevel(logging.ERROR)
@@ -144,8 +146,31 @@ def as_pdf(path, workdir):
     return None
 
 
+LIGATURES = re.compile("[\ufb00-\ufb06]")  # ff, fi, fl, ffi, ffl, long-st, st ligature glyphs
+
+
+class Extracted(dict):
+    """{parser: text}, plus .ligatures = {parser: ligature glyphs found before normalising}."""
+    ligatures = {}
+
+
+def normalise(texts):
+    """NFKC-normalise each parser's text (U+FB01 -> "fi"), counting ligature glyphs first.
+
+    An ATS that keeps the glyph misses words such as "Profile" or "certified", so the count is
+    reported as a problem; normalising lets the other checks still score the words. Safe to call twice.
+    """
+    out = Extracted({n: unicodedata.normalize("NFKC", t) for n, t in texts.items()})
+    prior = getattr(texts, "ligatures", {})
+    out.ligatures = {n: prior.get(n, 0) + len(LIGATURES.findall(t)) for n, t in texts.items()}
+    return out
+
+
 def extract_all(path):
-    """Return ({parser: text}, page count or None) for a .pdf, .html, .docx, .txt or .md CV."""
+    """Return ({parser: text}, page count or None) for a .pdf, .html, .docx, .txt or .md CV.
+
+    Texts are NFKC-normalised; the returned dict's .ligatures holds each parser's ligature count.
+    """
     path = Path(path)
     ext = path.suffix.lower()
     if ext not in (".pdf", ".html", ".htm", ".docx", ".txt", ".md"):
@@ -154,7 +179,7 @@ def extract_all(path):
     with tempfile.TemporaryDirectory() as work:
         pdf = as_pdf(path, work)
         if pdf is not None:
-            return {name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()}, page_count(pdf)
+            return normalise({name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()}), page_count(pdf)
     if ext == ".docx":
-        return {"python-docx": docx_text(path)}, None
-    return {"text": path.read_text(encoding="utf-8")}, None
+        return normalise({"python-docx": docx_text(path)}), None
+    return normalise({"text": path.read_text(encoding="utf-8")}), None

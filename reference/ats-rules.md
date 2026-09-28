@@ -6,6 +6,7 @@
 | Contact details in the body, not a Word header/footer | Many ATS skip headers and footers (`cvats score` warns) |
 | Standard headings: Profile, Experience, Education, Projects, Skills, Languages | Parsers map sections by name |
 | Headings as real text with letter-spacing ≤ 0.04em | Wider spacing extracts as "E X P E R I E N C E" |
+| `font-variant-ligatures: none` on `body` (the template has it) | Some fonts print "fi"/"fl" as one glyph, so a parser reads "Proﬁle", not "Profile" (`cvats score` flags it) |
 | No monospace fonts for headings (e.g. IBM Plex Mono, Consolas, Courier) | Some parsers split long monospaced words by glyph metrics alone ("E XPE RIE NCE"), whatever the letter-spacing — check with `cvats extract` |
 | Dates inline with the employer line, not in a right-aligned column | Some parsers lift right-aligned text out as a block; dates land under a later section |
 | Dates as "Mon YYYY – Mon YYYY" / "Present" | Years-only dates hide the length of each role |

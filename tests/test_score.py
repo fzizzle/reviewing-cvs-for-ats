@@ -81,3 +81,30 @@ def test_score_cv_full_order_when_parsers_agree(monkeypatch):
     monkeypatch.setattr(score, "extract_all", lambda path: ({"a": text, "b": text}, 1))
     rows = score.score_cv("dummy.txt")
     assert rows["a"]["order"] == 10 and rows["b"]["order"] == 10
+
+
+LIGATURE_CV = "{}\nx\nExperience\nEngineer\nEducation\nBSc\nSkills\nPython"
+
+
+def test_ligature_glyphs_are_normalised_before_scoring(monkeypatch):
+    # Repro: a parser that kept the fi-ligature glyph (U+FB01) missed the "Profile" heading, so the
+    # parsers "disagreed" on section order and both rows lost all 10 order points.
+    monkeypatch.setattr(score, "extract_all", lambda path: (
+        {"a": LIGATURE_CV.format("Pro\ufb01le"), "b": LIGATURE_CV.format("Profile")}, 1))
+    rows = score.score_cv("dummy.txt")
+    assert rows["a"]["order"] == 10 and rows["b"]["order"] == 10
+    assert rows["a"]["ligatures"] == 1 and rows["b"]["ligatures"] == 0
+    lines = [line for line in score.problems(rows) if "ligature" in line]
+    assert len(lines) == 1 and "a" in lines[0] and "font-variant-ligatures: none" in lines[0]
+
+
+def test_keyword_found_through_ligature():
+    assert score.keyword_hits("Certi\ufb01ed welder", {"certified": ["certified"]}) == {"certified": True}
+
+
+def test_template_turns_off_ligatures():
+    import pathlib
+    import re
+    css = (pathlib.Path(__file__).resolve().parents[1] / "templates" / "cv-template.html").read_text(encoding="utf-8")
+    body_rule = re.search(r"\bbody\s*\{([^}]*)\}", css).group(1)
+    assert "font-variant-ligatures: none" in body_rule
