@@ -31,18 +31,23 @@ def find_chrome():
 def render_pdf(html_path, pdf_path, timeout=120):
     """Print an HTML file to PDF with headless Chrome, using a throwaway browser profile.
 
-    Modern Chrome's default ("new") headless mode does not reliably exit on its own after
-    --print-to-pdf finishes on macOS (the browser process just keeps running, as if a window
-    were still open) and --headless=old no longer changes this on current Chrome. So rather than
-    subprocess.run(..., timeout=...) waiting for the process to exit, we poll for the PDF's size
-    to stop changing and then terminate the browser ourselves.
+    On this machine, Chrome 154 hangs after --print-to-pdf finishes specifically when pointed at a
+    fresh, empty --user-data-dir: confirmed by running it three ways with a temporary profile (bare,
+    plus --no-first-run --no-default-browser-check, and with a pre-seeded "First Run" sentinel file)
+    and getting a hang each time, versus exiting on its own in 0.57s with no --user-data-dir at all.
+    So this isn't "modern Chrome" hanging in general, and the first-run flags don't dodge it either
+    -- it's the throwaway profile specifically (which we still need, to avoid touching the user's
+    real Chrome profile) that triggers it. So rather than subprocess.run(..., timeout=...) waiting
+    for the process to exit, we poll for the PDF's size to stop changing and then terminate the
+    browser ourselves. This relies on Chrome writing the PDF in a single burst rather than
+    incrementally; the reviewer observed that hold even for a 280-page PDF.
     """
     html_path, pdf_path = Path(html_path).resolve(), Path(pdf_path).resolve()
     with tempfile.TemporaryDirectory() as profile:
         proc = subprocess.Popen(
             [find_chrome(), "--headless", "--disable-gpu", "--no-pdf-header-footer",
              f"--user-data-dir={profile}", f"--print-to-pdf={pdf_path}", html_path.as_uri()],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         deadline = time.monotonic() + timeout
         last_size, stable = -1, 0
         while time.monotonic() < deadline and proc.poll() is None:
