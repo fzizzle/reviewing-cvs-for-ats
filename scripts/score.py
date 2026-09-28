@@ -13,8 +13,10 @@ This is a heuristic simulation, NOT a commercial ATS score. Always report it as 
 Usage: cvats score CV [--keywords KW.json] [--baseline OLD_CV] [--max-pages N] [--json]
 
 KW.json: {"advert": "short label", "keywords": {"label": ["synonym", ...], ...}}
-Synonyms match case-insensitively at the start of a word: "manufactur" matches
-"manufacturing", but "ndt" does not match "roundtable". Never edit KW.json to raise a score.
+Synonyms match case-insensitively, across line breaks. Short synonyms (<= 4 chars) match whole words,
+plural allowed: "api" matches "APIs", but "ai" does not match "Aim" and "r" does not match "Research".
+Longer synonyms match at the start of a word: "manufactur" matches "manufacturing", "ndt" never
+matches "roundtable". List "leadership" separately from "lead". Never edit KW.json to raise a score.
 """
 import argparse
 import json
@@ -61,9 +63,16 @@ CONTACT_WEIGHTS = {"email": 5, "phone": 3, "international_phone": 2, "link": 2.5
 COLS = ["total", "parse", "keywords", "contact", "sections", "order", "dates", "placement", "length", "penalty", "words"]
 
 
+def _synonym_pattern(syn):
+    """Short synonyms (<= 4 chars) match whole words, plural allowed; longer ones match word starts."""
+    syn = " ".join(syn.lower().split())
+    esc = re.escape(syn)
+    return r"(?<!\w)" + esc + r"s?(?!\w)" if len(syn) <= 4 else r"(?<!\w)" + esc
+
+
 def keyword_hits(text, keywords):
-    low = unicodedata.normalize("NFKC", text).lower()
-    return {label: any(re.search(r"(?<!\w)" + re.escape(s.lower()), low) for s in syns)
+    low = " ".join(unicodedata.normalize("NFKC", text).lower().split())  # line breaks become spaces
+    return {label: any(re.search(_synonym_pattern(s), low) for s in syns)
             for label, syns in keywords.items()}
 
 

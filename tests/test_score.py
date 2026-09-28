@@ -108,3 +108,18 @@ def test_template_turns_off_ligatures():
     css = (pathlib.Path(__file__).resolve().parents[1] / "templates" / "cv-template.html").read_text(encoding="utf-8")
     body_rule = re.search(r"\bbody\s*\{([^}]*)\}", css).group(1)
     assert "font-variant-ligatures: none" in body_rule
+
+
+def test_short_synonyms_match_whole_words_only():
+    kw = {s: [s] for s in ("cro", "r", "go", "ai", "sap")}
+    assert score.keyword_hits("cross-functional Research Good Aim Sapient", kw) == {s: False for s in kw}
+
+
+def test_short_synonyms_allow_plural_and_punctuation():
+    kw = {s: [s] for s in ("r", "api", "sql", "ga4")}
+    assert score.keyword_hits("R, APIs, SQL-based, GA4", kw) == {s: True for s in kw}
+
+
+def test_multiword_keywords_survive_line_breaks_and_slashes():
+    kw = {"PM": ["project management"], "A/B": ["a/b test"]}
+    assert score.keyword_hits("Led project\nmanagement and a/b testing", kw) == {"PM": True, "A/B": True}
