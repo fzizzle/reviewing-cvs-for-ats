@@ -43,6 +43,8 @@ def render_pdf(html_path, pdf_path, timeout=120):
     incrementally; the reviewer observed that hold even for a 280-page PDF.
     """
     html_path, pdf_path = Path(html_path).resolve(), Path(pdf_path).resolve()
+    pdf_path.unlink(missing_ok=True)  # a stale PDF here makes the stable-size poll below
+    # see the old file as "done" almost immediately, killing Chrome before it writes.
     with tempfile.TemporaryDirectory() as profile:
         proc = subprocess.Popen(
             [find_chrome(), "--headless", "--disable-gpu", "--no-pdf-header-footer",

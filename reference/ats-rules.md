@@ -23,5 +23,5 @@
 - Don't upload a CV to online ATS checkers unless the person explicitly agrees. It's personal data sent to a third party.
 
 ## Known tool limits
-- `cvats layout` can miss orphan lines (a wrapped line left holding 1–2 words) when the CSS line-height is ≥ 1.6 — check visually too at that setting.
-- `cvats repeats`' 3-word phrase match runs after stopwords are stripped, so a flagged "repeat" may not be a literal quote in the CV — read the source text before deciding it's real repetition.
+- `cvats layout` misses orphan lines (a wrapped line holding 1–2 words) when line-height exceeds ~1.55 (its wrap test assumes line gap ≤ 1.55 × font size) — above that, Read the rendered PDF and check by eye.
+- `cvats repeats` builds 3-word phrases after dropping stopwords, months and bare numbers, across line and section breaks, so a flagged phrase may not be a literal quote — find it in the source before rewriting. `--allow` hides a phrase only when all three of its words are allowed.
