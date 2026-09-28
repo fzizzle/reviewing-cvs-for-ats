@@ -2,7 +2,8 @@
   "advert": "Senior Marketing Manager (B2B SaaS), Manchester",
   "keywords": {
     "B2B marketing": ["b2b"],
-    "HubSpot / Salesforce MC": ["hubspot", "salesforce"],
+    "HubSpot": ["hubspot"],
+    "Salesforce Marketing Cloud": ["salesforce"],
     "GA4": ["ga4", "google analytics"],
     "Looker Studio": ["looker"],
     "SQL": ["sql"],

@@ -161,3 +161,12 @@ def test_german_and_iso_months_are_ranges():
                  "Mayo 2020 – en cours", "dic 2019 – presente"):
         assert score.RANGE.fullmatch(text), text
     assert score.RANGE.search("Chicago 2019") is None
+
+
+def test_keyword_example_keeps_one_tool_per_label():
+    import json
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[1] / "templates" / "keywords-example.json"
+    kw = json.loads(path.read_text(encoding="utf-8"))["keywords"]
+    assert kw["HubSpot"] == ["hubspot"] and kw["Salesforce Marketing Cloud"] == ["salesforce"]
+    assert not any("/" in label and "A/B" not in label for label in kw)  # no OR-merged tool labels
