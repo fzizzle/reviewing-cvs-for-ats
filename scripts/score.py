@@ -60,7 +60,7 @@ ROLE_WORDS = ("manager", "officer", "coordinator", "specialist", "director", "le
 ROLE_BLOCKLIST = re.compile(r"\b(?:" + "|".join(ROLE_WORDS) + r")\b", re.I)
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-INTL = re.compile(r"\+\d{1,3}[\s.-]?\(?\d")
+PHONE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 LINK = re.compile(r"linkedin\.com/|github\.com/|https?://|www\.", re.I)
 LOCATION = re.compile(r"(?<!\w)[A-ZÀ-Ý][a-zà-ÿ]+(?:[ -][A-ZÀ-Ý][a-zà-ÿ]+)*,\s*[A-ZÀ-Ý][A-Za-zà-ÿ]+")
 CONTACT_WEIGHTS = {"email": 5, "phone": 3, "international_phone": 2, "link": 2.5, "location": 2.5}
@@ -128,14 +128,16 @@ def date_placement(text):
     return ok, bad
 
 
-def _has_phone(text):
-    return any(len(re.sub(r"\D", "", m.group())) >= 9 for m in re.finditer(r"\+?\d[\d\s().-]{6,}\d", text))
+def _phones(text):
+    """Phone-like runs with at least 9 digits (so "+25%" or "2019 - 2021" never count)."""
+    return [m.group() for m in PHONE.finditer(text) if len(re.sub(r"\D", "", m.group())) >= 9]
 
 
 def contact_checks(text):
     head = "\n".join([line for line in text.splitlines() if line.strip()][:5])  # contact block only
-    return {"email": bool(EMAIL.search(text)), "phone": _has_phone(text),
-            "international_phone": bool(INTL.search(text)), "link": bool(LINK.search(text)),
+    phones = _phones(text)
+    return {"email": bool(EMAIL.search(text)), "phone": bool(phones),
+            "international_phone": any(p.startswith("+") for p in phones), "link": bool(LINK.search(text)),
             "location": bool(LOCATION.search(head))}
 
 

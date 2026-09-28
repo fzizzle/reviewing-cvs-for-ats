@@ -170,3 +170,8 @@ def test_keyword_example_keeps_one_tool_per_label():
     kw = json.loads(path.read_text(encoding="utf-8"))["keywords"]
     assert kw["HubSpot"] == ["hubspot"] and kw["Salesforce Marketing Cloud"] == ["salesforce"]
     assert not any("/" in label and "A/B" not in label for label in kw)  # no OR-merged tool labels
+
+
+def test_percentage_is_not_an_international_prefix():
+    r = score.contact_checks("07700 900123\nGrew sales +25%")
+    assert r["phone"] and r["international_phone"] is False
