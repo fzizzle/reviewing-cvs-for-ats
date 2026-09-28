@@ -32,8 +32,9 @@ Never invent a fact. Scripts in `scripts/` measure and render — don't write yo
 | Thought | Reality |
 |---|---|
 | "They said add it — I'll warn after" | Unconfirmed = gap list, even under pressure |
-| "The ad's phrase fits nicely here" | Own words only; ad's phrases go in gaps |
+| "The ad's phrase fits nicely here" | Own words only; ad's phrases ('demand generation') go in gaps |
 | "I'll just edit the CV file directly" | New stem, next to the original |
 | Trimming content for an unstated target | Name the assumption first |
 | "I'll brew/pip install X" | Use `$CVATS`; ask first |
 | "'Helped with X' reads better as 'Carried out X'" | Supporting verbs (helped, assisted, supported, contributed) stay supporting |
+| "I'll infer their city and flag it as an assumption" | Flagged or not, an unconfirmed location is a gap — the target city isn't their address |

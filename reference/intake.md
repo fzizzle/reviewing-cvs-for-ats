@@ -4,7 +4,7 @@ The target decides what the CV leads with. Ask these first, in one message. If t
 
 1. Target role and industry (e.g. "composites R&D internship", "senior B2B marketing manager").
 2. Job type and timing: full-time, internship (duration and start date), graduate scheme, contract.
-3. Country and city they're applying in, and their right to work if it's relevant.
+3. Country and city they're applying in (the target city, not their address), and their right to work if it's relevant.
 4. One real advert, if they have one. Build the keyword file from it (see ats-rules.md).
 5. Page limit, if they've been told one.
 6. For every tool, method, grade, language level or metric you want to add or reword: "Have you used X? Where?" Only confirmed items go on the CV.
