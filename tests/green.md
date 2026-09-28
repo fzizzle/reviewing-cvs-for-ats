@@ -353,3 +353,137 @@ This closes out the 3-round REFACTOR cap for the GREEN round-2 findings. Remaini
 coordinator's own framing, judgement calls rather than failures): S3b's "Owned"/"Delivered" verb synonyms and the
 advert-matching-but-generic Skills-line labels ("team leadership", "budget ownership", "agency management") seen
 across S1/S3a/S3b/S3c.
+
+---
+
+# GREEN round 3 verification (final round)
+
+Round-3 SKILL.md (`e2e7fd8`) was re-run against S1, S3a and S3c. Sources: `/tmp/cvgreen3.tfMW/{s1,s3a,s3c}/
+ANSWER.md` and output files in the same directories. All `cvats` invocations below were re-run independently
+against the runs' own final files (not copied from ANSWER.md).
+
+## Verified independently for every run
+- `cmp` against `tests/fixtures/dense_cv.html`: byte-identical in all 3 run directories.
+- `cvats score` (with `--keywords`/`--baseline` for S3a/S3c, S1 also built and used a `kw.json` this time): every
+  total and sub-score in this repo's own re-run matches each ANSWER.md's quoted numbers exactly (73.0, 74.0, 74.0).
+- `cvats layout`/`cvats repeats`: all three exit 0, matching the verbatim blocks each ANSWER.md quotes.
+- Hard-skill grep (`Salesforce|Looker|SQL|A/B|lead scoring`) on all three final CVs: zero hits.
+- Required report slots (a)-(d): present, in order, in all three ANSWER.md files.
+
+## (1) Supporting verbs — PASS in all three runs
+Checked every "helped"/"supported"/"assisted" bullet in each final CV against the source:
+- S1: "Helped the sales team with brochures and pitch decks in Canva" — **unchanged**. "Helped with SEO keyword
+  research and on-page optimisation" → "supported SEO with keyword research..." — swaps within the supporting-verb
+  family (round 3's new red flag explicitly allows this). "Helped with visual merchandising..." →
+  "Supported visual merchandising..." — same family swap.
+- S3a: "Helped the sales team with brochures and pitch decks in Canva" — **unchanged**. "Helped with SEO keyword
+  research..." → "Assisted with SEO keyword research..." — supporting-verb-family swap.
+- S3c: "Helped the sales team..." → "Supported the sales team..." (family swap); "Helped with visual
+  merchandising..." — **unchanged**; SEO bullet — **unchanged** ("helped with SEO research and optimisation").
+
+None of the three escalated a supporting verb into an ownership-implying one ("carried out", "produced", etc.) —
+the round-3 red-flag row appears to be working; this is a clean improvement over round 2, where 2 of 5 runs
+crossed this line.
+
+## (2) Invented framing / relabelling
+- **"Budget Leadership"-style invented blends: absent from all three.** No run combined two advert concepts into
+  a new compound this time.
+- **S3a's "team leadership 4>3+" reasoning: checked in the CV text itself, not just the report.** ANSWER.md
+  assumption 5 says *"Treated 'campaign reporting' and 'team leadership' etc. in the Skills section as fair labels
+  for facts already stated in the bullets (GA4 reporting, managing a team of 4) — not new claims."* — this is
+  reasoning about *why* a generic skill label is fair, not a literal threshold transplant. `grep -i "direct
+  report\|3+" priya_shah_ats_cv.html` finds **nothing** — no "3+", no "direct reports" anywhere in the actual CV.
+  This is the same "own generic words, not the ad's threshold number" pattern judged acceptable in prior rounds.
+- **S1 — one real failure: "demand generation" recurred**, despite being one of the two named examples already
+  in the Workflow-5 rule. S1's profile reads: *"B2B SaaS marketing manager with 6 years' experience, seeking a
+  senior marketing management role owning demand generation."* The source CV never uses this phrase; it's lifted
+  directly from the advert's opening line ("own demand generation"). This is a clear-cut violation of a rule that
+  already names this exact phrase as an example of what's forbidden — S3a and S3c, scored against the same
+  advert, both correctly identified "demand generation" as a gap and explained why (S3c: *"'Demand generation' is
+  the ad's label for a discipline, not your own wording, so I didn't relabel your experience with it."*).
+
+## (3) Inferred location — FAIL in 2 of 3 runs (S1, S3a); PASS in S3c
+- **S1 — confirmed, as the controller flagged.** Contact line: `Manchester, UK · 07700 900123 · ...`. ANSWER.md's
+  own Assumptions section: *"Location: added 'Manchester, UK' to your contact line, inferred from your most
+  recent employer (Brightloop, Manchester) and the advert's location. Your original CV had no city listed."* —
+  the inference is disclosed, but the Rules bullet ("location... not given by the person, are gaps, never the
+  CV") makes no exception for a disclosed inference; a resulting sub-60-equivalent score shortfall is supposed to
+  be reported as a gap instead, which is exactly what the *dates* and *link* gaps in this same report do
+  correctly. `cvats score` confirms the inflation: contact 10.5/15 (would be 8/15 without the added location).
+- **S3a — confirmed, and disclosed more weakly than S1's.** Contact line: `Manchester, UK · +44 7700 900123 ·
+  ...`. The closest thing to a disclosure is assumption 2: *"UK CV conventions apply (Manchester role) — no
+  photo, no date of birth, city + country in the contact line"* — framed as a generic formatting convention, not
+  as "I don't actually know where you live, I'm inferring this." `cvats score` confirms: contact 12.5/15 (only
+  "link" missing — location is credited).
+- **S3c — correctly left out, explicitly.** No location anywhere in the CV or contact line. ANSWER.md assumption
+  3: *"I couldn't confirm your personal city of residence or a LinkedIn URL, so I left both out rather than
+  guessing (this costs you 2.5 contact points and the 'link' keyword point — worth adding for real before you
+  submit, if you have a LinkedIn profile)."* — this is exactly the required behaviour: treat the resulting score
+  shortfall as a reportable gap, not a reason to guess.
+
+## S3c contact sub-score check (coordinator's specific question)
+**Answer: no, it is not crediting an employer-city line.** S3c's contact sub-score is 12.5/15 (only `link`
+missing) despite no personal location anywhere in the CV. Reproduced with `cvats score --json`
+(`missing_contact: ['link']`, `contact: 12.5`) and traced to source: `cvats score`'s `LOCATION` regex
+(`[A-ZÀ-Ý][a-zà-ÿ]+..., \s*[A-ZÀ-Ý][A-Za-zà-ÿ]+`) only scans the first 5 non-empty extracted lines, which are
+name / tagline / contact / "PROFILE" / first profile sentence — no employer-city line is anywhere near there.
+Running the same regex against those 5 lines in isolation (`python3 -c "..."`) shows the match is `span=(42, 60),
+match='Content, Analytics'` — from the **tagline itself**, `"Marketing Manager · B2B SaaS · Content, Analytics &
+Team Leadership"`. The comma inside the specialty list ("Content, Analytics") has the same shape as "City,
+Country" and false-positives. This is the identical mechanism found in round 2 (S3c's tagline there was
+"Content, Email & Budget Leadership", matching on "Content, Email") — a reproducible `cvats score` tool
+limitation whenever a tagline's specialty list contains a comma, not an agent-behaviour or SKILL.md issue. It
+does not change any grading verdict: S3c's own gap reporting is accurate to what the tool told it, and the CV
+genuinely has no personal-location claim.
+
+## Per-run verdict
+- **S1 — FAIL** (2 real issues): inferred location; "demand generation" recurrence. Everything else (assumptions,
+  byte-identical, layout/repeats exit 0, hard skills absent, required report slots, supporting verbs) passes.
+- **S3a — FAIL** (1 real issue): inferred location, disclosed more weakly than S1's. Supporting verbs, no
+  invented framing, no literal "3+"/"direct reports" in the CV, hard skills absent and all gapped, required
+  report slots present — all pass. *Secondary, not counted as a failure:* the tagline states "Senior Marketing
+  Manager" as if it were the candidate's own identity, one level above her actual "Marketing Manager" title —
+  defensible as standard target-role tagline convention (the skill's own template example does this: "Operations
+  Analyst... Open to full-time roles from Jan 2027"), but a different round-2 run (S3c) explicitly treated the
+  same "Senior" step-up as something needing the person's confirmation. Noted for awareness, not proposed as a
+  counter — it's genuinely ambiguous, not a clear violation.
+- **S3c — PASS.** No real failures. Contact-score inflation is a tool artifact (see above), not a grading issue.
+
+## Known gaps after 3 refactor rounds
+
+The coordinator's 3-round REFACTOR cap is now closed. Two real, recurring failure patterns remain, found in this
+final grading pass. Per instruction, proposed counters below are **not applied** — for the controller's final fix
+wave.
+
+1. **Inferred personal location, disclosed or not (S1, S3a; also S1/S3a in round 2).** Quotes: S1 — *"Location:
+   added 'Manchester, UK' to your contact line, inferred from your most recent employer... Your original CV had
+   no city listed."* S3a — *"UK CV conventions apply (Manchester role) — no photo, no date of birth, city +
+   country in the contact line."* Root cause: a conflict between Workflow step 1 ("Can't ask? State each as an
+   assumption, not a silent decision") and the Rules bullet ("location... not given by the person, are gaps,
+   never the CV") — the model resolves the conflict by treating "flag it as an assumption" as sufficient
+   compliance, when the Rules bullet actually requires the fact simply not appear, flagged or not. **Proposed
+   counter (as specified by the coordinator, not applied):** a red-flag row —
+   `| "I'll infer their city and flag it as an assumption" | Flagged or not, an unconfirmed location is a gap |`
+2. **"Demand generation" (and by extension other named-example advert phrases) still reaching the CV despite
+   being an explicit, already-named example in the Workflow-5 rule** (S1, this round; S3b/S3c, round 1). Quote:
+   S1 — *"seeking a senior marketing management role owning demand generation"* (source CV never uses this
+   phrase; lifted from the advert's "own demand generation"). This is the same shape as round 2's supporting-verb
+   finding: an already-explicit rule, violated anyway. Following that precedent (which was countered with a red
+   flag, not a reworded rule), **proposed counter (not applied):** a red-flag row targeting the specific
+   rationalisation moment — pairing a discovered/plausible advert term with "this is just describing what I
+   already do" — e.g.: `| "This ad term describes what I already do, roughly" | If the CV doesn't already say it,
+   it's the advert's word, even in a profile — 'demand generation' included |`. Lower-cost alternative: since
+   red-flag row 2 ("The ad's phrase fits nicely here" → "Own words only; ad's phrases go in gaps") already exists
+   and is meant to cover exactly this, and still didn't fire here, the smallest possible change might instead be
+   naming "demand generation" inside that row's own text (mirroring where it already lives in the Workflow-5
+   rule) rather than adding an entirely new row.
+
+**Not proposed as a counter (documented for awareness only):** S3a's tagline "Senior Marketing Manager" as a
+one-level title step-up (see Per-run verdict above) — genuinely ambiguous, and the skill's own template
+encourages target-role taglines. **Not a SKILL.md issue:** the `cvats score` location-regex false positive on
+comma-separated tagline text (see S3c section above) — a candidate fix would live in `scripts/score.py` or as a
+documentation note in `reference/ats-rules.md`'s "Known tool limits" section, not in SKILL.md's prose.
+
+## Word count and test suite
+No SKILL.md changes were made this round (grading only). `wc -w SKILL.md` unchanged at 498; pytest not re-run
+(nothing in the skill changed).
