@@ -1,3 +1,6 @@
+import pytest
+
+import cvlib
 import repeats
 
 HTML = """<html><head><title>Jane Doe CV</title><style>li { margin: 0 }</style></head><body>
@@ -42,3 +45,32 @@ def test_text_bullets(tmp_path):
 
 def test_dates_do_not_create_phrases():
     assert repeats.repeated_phrases("London UK Sep 2023 Apr 2025. London UK Sep 2019 Jun 2023.") == []
+
+
+try:
+    cvlib.find_chrome()
+    HAVE_CHROME = True
+except RuntimeError:
+    HAVE_CHROME = False
+
+
+CHROME_LI_BULLETS_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><body>
+<ul>
+<li>Led the migration of billing data.</li>
+<li>Led a team of four analysts.</li>
+<li>Led quarterly planning with finance.</li>
+</ul>
+</body></html>"""
+
+
+@pytest.mark.skipif(not HAVE_CHROME, reason="needs Chrome/Chromium/Edge")
+def test_pdf_bullets_from_chrome_li_markers(tmp_path):
+    # Repro: the same CV as .html reports 3 bullets, but as a Chrome-rendered PDF it reported 0
+    # (and exited 0, a silent clean pass) because Chrome draws <li> markers as vector curves, not
+    # bullet glyphs in the text stream. load() must fall back to layout.page_lines()'s marker flag.
+    html = tmp_path / "cv.html"
+    html.write_text(CHROME_LI_BULLETS_HTML, encoding="utf-8")
+    pdf = cvlib.render_pdf(html, tmp_path / "cv.pdf")
+    bullets, _ = repeats.load(pdf)
+    assert repeats.repeated_openers(bullets) == {"led": 3}

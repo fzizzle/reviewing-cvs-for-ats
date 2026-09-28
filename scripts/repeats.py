@@ -75,7 +75,20 @@ def load(path):
         d = docx.Document(str(p))
         bullets = [para.text for para in d.paragraphs if "List" in para.style.name and para.text.strip()]
         return bullets, "\n".join(para.text for para in d.paragraphs)
-    text = PDF_PARSERS["pdfplumber"](str(p)) if ext == ".pdf" else p.read_text(encoding="utf-8")
+    if ext == ".pdf":
+        # Chrome renders <li> markers as filled vector curves, not the bullet glyphs a text-only
+        # scan looks for, so a PDF made from an <ul>/<li> CV would otherwise show zero bullets.
+        # Reuse layout.page_lines(), which already flags such lines via marker=True.
+        import pdfplumber
+        import layout  # local import: avoids a circular import (layout.py doesn't import repeats)
+        bullets = []
+        with pdfplumber.open(str(p)) as doc:
+            for page in doc.pages:
+                for line in layout.page_lines(page):
+                    if BULLET.match(line["text"]) or line.get("marker"):
+                        bullets.append(BULLET.sub("", line["text"]))
+        return bullets, PDF_PARSERS["pdfplumber"](str(p))
+    text = p.read_text(encoding="utf-8")
     return [BULLET.sub("", line) for line in text.splitlines() if BULLET.match(line)], text
 
 
@@ -110,6 +123,8 @@ def main(argv=None):
     ap.add_argument("--allow", default="", help="comma-separated words allowed to repeat (e.g. skills)")
     a = ap.parse_args(argv)
     bullets, text = load(a.cv)
+    if Path(a.cv).suffix.lower() == ".pdf" and not bullets:
+        print("warning: no bullets detected in this PDF — run repeats on the source .html/.docx to check bullet openers")
     openers = repeated_openers(bullets)
     phrases = repeated_phrases(text, allow=[w for w in a.allow.split(",") if w])
     terms = {t: c for t, c in term_counts(text, [t.strip() for t in a.terms.split(",") if t.strip()]).items() if c > 1}

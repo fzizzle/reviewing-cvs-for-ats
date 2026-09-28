@@ -22,7 +22,13 @@ MM_PER_PT = 25.4 / 72
 
 
 def page_lines(page):
-    """Group a pdfplumber page's words into visual lines."""
+    """Group a pdfplumber page's words into visual lines.
+
+    Chrome renders <li> bullet glyphs as filled vector curves rather than text, so a line that
+    starts a list item is flagged with marker=True when a curve sits just left of it (curve x1 at
+    or before the line's x0, and the curve's vertical centre within the line's top..bottom, with
+    about 6pt of slack either way).
+    """
     words = sorted(page.extract_words(extra_attrs=["size"]), key=lambda w: (w["top"], w["x0"]))
     lines = []
     for w in words:
@@ -36,6 +42,11 @@ def page_lines(page):
                           "size": w["size"], "words": [w]})
     for line in lines:
         line["text"] = " ".join(w["text"] for w in sorted(line["words"], key=lambda w: w["x0"]))
+    for curve in page.curves:
+        cy = (curve["top"] + curve["bottom"]) / 2
+        for line in lines:
+            if curve["x1"] <= line["x0"] and line["top"] - 6 <= cy <= line["bottom"] + 6:
+                line["marker"] = True
     return lines
 
 
@@ -45,7 +56,8 @@ def find_orphans(lines, right_edge, max_words=2, slack=40, gap_factor=1.55):
     for prev, cur in zip(lines, lines[1:]):
         gap = cur["top"] - prev["top"]
         wrapped = prev["x1"] >= right_edge - slack and 0 < gap <= prev["size"] * gap_factor
-        continues = cur["x0"] >= prev["x0"] - 1 and not cur["text"].startswith(BULLET_GLYPHS)
+        continues = (cur["x0"] >= prev["x0"] - 1 and not cur["text"].startswith(BULLET_GLYPHS)
+                     and not cur.get("marker"))
         if wrapped and continues and len(cur["text"].split()) <= max_words:
             orphans.append(f"…{prev['text'][-40:]} ⏎ {cur['text']}")
     return orphans
@@ -62,12 +74,16 @@ def check(pdf_path, max_pages=2, min_body_pt=9.5):
             lines = page_lines(page)
             if lines:
                 orphans += find_orphans(lines, max(line["x1"] for line in lines))
-                boxes.append((min(l["x0"] for l in lines), page.width - max(l["x1"] for l in lines),
+                boxes.append((min(l["x0"] for l in lines), max(l["x1"] for l in lines),
                               min(l["top"] for l in lines), page.height - max(l["bottom"] for l in lines),
-                              page.height))
+                              page.height, page.width))
     if not boxes:
         raise ValueError(f"{pdf_path} has no extractable text (scanned image?)")
-    left, right, top = boxes[0][0], boxes[0][1], boxes[0][2]
+    # Margins: left/right are the tightest indent seen on ANY page (a short page 1 must not look
+    # like it has a wide margin just because its own lines didn't reach as far as later pages').
+    left = min(b[0] for b in boxes)
+    right = boxes[0][5] - max(b[1] for b in boxes)
+    top = boxes[0][2]
     bottom, height = boxes[-1][3], boxes[-1][4]
     body = sizes.most_common(1)[0][0] if sizes else 0
     report = {
