@@ -2,8 +2,10 @@
 <!--
   ATS-safe one-page CV template (reviewing-cvs-for-ats skill). Keep these rules when editing:
   - Single column. No tables, text boxes or multi-column grids for content.
-  - Section titles are real <h2> text; letter-spacing <= 0.04em (wider spacing makes some
-    parsers read "E X P E R I E N C E").
+  - Section titles are real <h2> text in a proportional (sans-serif) font, with
+    letter-spacing <= 0.04em. Monospace webfonts (e.g. IBM Plex Mono, Consolas,
+    Courier) made pypdf split long headings by glyph metrics alone ("E XPE RIE
+    NCE"), independent of the letter-spacing value — check with `cvats extract`.
   - Dates sit inline in the .sub line after the employer, never in a right-aligned column
     (some parsers pull right-aligned text out as a separate block and detach the dates).
   - Dates as "Mon YYYY – Mon YYYY" or "Mon YYYY – Present".
