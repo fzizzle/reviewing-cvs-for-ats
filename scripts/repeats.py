@@ -27,7 +27,7 @@ STOP = set(("a an the and or of to in on at by for with from as into across via 
             "also over under up out " + MONTHS).split())
 BULLET = re.compile(r"^\s*[•▪‣◦*\-–]\s+")
 LABEL = re.compile(r"^\s*([^:]{1,60}):\s+(.*)$")
-WORD = re.compile(r"[a-zà-ÿ0-9+#][a-zà-ÿ0-9+#'’-]*")
+WORD = re.compile(r"[^\W_][\w+#'’-]*")  # any script's letters or digits, then c++/c#/o'neill/e-mail
 
 
 class _Html(HTMLParser):

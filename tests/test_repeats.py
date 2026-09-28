@@ -164,3 +164,13 @@ def test_zero_bullet_warning_for_every_format(tmp_path, capsys):
     f.write_text("Experience\n" + " ".join(f"word{i}" for i in range(40)) + "\n", encoding="utf-8")
     repeats.main([str(f)])
     assert "warning: no bullets detected" in capsys.readouterr().out
+
+
+def test_non_latin_words_are_counted():
+    # Repro: WORD only knew a-z and à-ÿ, so Cyrillic text produced no words and no phrases.
+    text = "управление проектами компании. управление проектами компании."
+    assert repeats.repeated_phrases(text) == ["управление проектами компании"]
+
+
+def test_word_keeps_polish_letters_and_programming_names():
+    assert repeats.WORD.findall("zarządzanie c++ c#") == ["zarządzanie", "c++", "c#"]
