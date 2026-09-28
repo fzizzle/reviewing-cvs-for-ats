@@ -317,3 +317,39 @@ item — `link` — from the tool's actual output).
 ## Word count and test suite
 No SKILL.md changes were made this round (grading only, per the coordinator's instruction), so `wc -w SKILL.md`
 is unchanged at 496 and the full pytest suite was not re-run (nothing in the skill changed).
+
+---
+
+# REFACTOR round 3 (final round)
+
+The coordinator applied both proposed counters directly, exactly as specified:
+
+1. **Supporting-verb escalation red flag.** Added verbatim to the Red flags table (SKILL.md L39):
+   `| "'Helped with X' reads better as 'Carried out X'" | Supporting verbs (helped, assisted, supported,
+   contributed) stay supporting |`. Framed as a discipline failure (the rule already existed — Rules L27's
+   "helped create" example — and 2 of 5 round-2 runs crossed it anyway), so the counter is a red flag rather than
+   a new or reworded rule.
+2. **Invented-framing example.** Extended the existing Workflow 5 relabelling clause (SKILL.md L18) with one more
+   example, keeping it to one clause as instructed: `("3+ direct reports", "demand generation", or a blend like
+   "Budget Leadership")`. No new sentence, no new row — the existing rule ("...the CV doesn't already say is a
+   gap, not a tagline or skill") already covers invented blends once they're named as an example of what it
+   catches.
+
+**Word budget:** both additions together cost +27 words against the round-2 baseline (496). To stay under 500,
+trimmed non-behavioural wording elsewhere without touching any of the 13 pre-existing pattern quotes' substance:
+dropped "(reset each shell)" from the Overview (implementation detail, not tied to any pattern), "and keep the
+numbers" from Workflow 2 and "then questions" from Workflow 3 (both redundant with Workflow 7's report recipe and
+`reference/feedback-rubric.md`'s own closing line), "the advert's" from Workflow 4, "on the file you'll ship" from
+Workflow 6 (redundant with the sentence right after it), and shortened two Rules/red-flag phrasings ("ask before
+adding a tool" → "ask first"; "ask before touching the host" → "ask first"; "maximize the score" pressure →
+"score pressure"). `wc -w SKILL.md` → **498** (under 500). Every reworded quote was checked against
+`tests/baseline.md`'s mapping table and updated there to match verbatim; no pattern's *coverage* changed, only
+some quotes' exact wording.
+
+**Full pytest suite:** `"$HOME/.cache/cv-ats/venv/bin/python" -m pytest -q tests` → all tests still pass (SKILL.md
+is prose only; no script logic changed).
+
+This closes out the 3-round REFACTOR cap for the GREEN round-2 findings. Remaining, not counter'd (per the
+coordinator's own framing, judgement calls rather than failures): S3b's "Owned"/"Delivered" verb synonyms and the
+advert-matching-but-generic Skills-line labels ("team leadership", "budget ownership", "agency management") seen
+across S1/S3a/S3b/S3c.
