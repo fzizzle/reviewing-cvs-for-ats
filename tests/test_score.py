@@ -31,7 +31,7 @@ def test_marketing_word_is_not_a_month():
 def test_contact_checks():
     full = score.contact_checks("Jane Doe\nParis, France · +33 7 54 07 83 76 · jane@example.com · linkedin.com/in/jane")
     assert all(full.values())
-    partial = score.contact_checks("Jane Doe\n07826 761326 · jane@example.com")
+    partial = score.contact_checks("Jane Doe\n07700 900123 · jane@example.com")
     assert partial["phone"] and not partial["international_phone"] and not partial["location"]
 
 
