@@ -30,19 +30,23 @@ from cvlib import docx_header_footer_text, extract_all, normalise  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
-         r"décembre|decembre|jan|feb|fév|fev|mar|apr|avr|jun|jul|juil|aug|sep|sept|oct|nov|dec|déc)\.?")
-DATE = rf"(?:{MONTH}\s+\d{{4}}|\d{{1,2}}/\d{{4}}|(?:19|20)\d{{2}})"
-RANGE = re.compile(
-    rf"(?<!\w)({DATE})\s*(?:–|—|-|to|à)\s*({DATE}|present|current|now|today|aujourd'hui|présent)(?!\w)", re.I)
+         r"décembre|decembre|januar|märz|juni|juli|oktober|dezember|"  # German (others match EN/FR)
+         r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|"
+         r"jan|feb|fév|fev|mar|mär|apr|avr|jun|jul|juil|aug|sep|sept|oct|okt|nov|dec|déc|dez|ene|abr|ago|dic)\.?")
+DATE = (rf"(?:{MONTH}\s+\d{{4}}|(?:19|20)\d{{2}}-(?:0[1-9]|1[0-2])(?!\d)|\d{{1,2}}[./]\d{{4}}"
+        rf"|(?:19|20)\d{{2}})")  # "Mar 2020", ISO "2020-03", "03.2020" or "3/2020", "2020"
+PRESENT = r"present|current|now|today|aujourd'hui|présent|en\s+cours|heute|aktuell|actualidad|presente"
+RANGE = re.compile(rf"(?<!\w)({DATE})\s*(?:–|—|-|to|à)\s*({DATE}|{PRESENT})(?!\w)", re.I)
 YEAR_ONLY = re.compile(r"(?:19|20)\d{2}")
 
 SECTIONS = {  # checked in this order; first match wins
     "profile": r"\b(profile|summary|about me|profil|objective)\b",
-    "education": r"\b(education|qualifications|formation|ausbildung|educación)\b",
-    "experience": r"\b(experience|employment|work history|career history|expérience|berufserfahrung|experiencia)\b",
+    "education": r"\b(education|qualifications|formations?|formación|diplômes|ausbildung|educación)\b",
+    "experience": (r"\b(experiences?|employment|work history|career history|expériences?|berufserfahrung"
+                   r"|experiencias?)\b"),
     "projects": r"\b(projects?|projets?)\b",
-    "skills": r"\b(skills|compétences|competences|kenntnisse|habilidades)\b",
-    "languages": r"\b(languages|langues|sprachen|idiomas)\b",
+    "skills": r"\b(skills|compétences?|competences?|kenntnisse|habilidades)\b",
+    "languages": r"\b(languages|langues?|sprachen|idiomas)\b",
     "interests": r"\b(interests|hobbies|loisirs|centres d'intérêt)\b",
 }
 REQUIRED = ("experience", "education", "skills")

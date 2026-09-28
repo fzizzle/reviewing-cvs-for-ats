@@ -133,3 +133,31 @@ def test_lowercase_wrapped_fragment_is_not_a_heading():
     ok, bad = score.date_placement("Experience\nAcme Jan 2021 – Present\npresentation and\nnegotiation skills\n"
                                    "Beta Jan 2019 – Feb 2021\nEducation\nBSc")
     assert ok == 2 and bad == []
+
+
+GERMAN_CV = ("BERUFSERFAHRUNG\nIngenieurin, Beispiel GmbH, 03.2019 – heute\n"
+             "Praktikantin, Muster AG, 09.2017 – 02.2019\n"
+             "AUSBILDUNG\nM.Sc. Maschinenbau, TU Beispiel, 10.2015 – 09.2017\nKENNTNISSE\nCAD, Python")
+
+
+def test_german_numeric_dates_and_heute():
+    r = score.score_text(GERMAN_CV, 1, expected_dates=3)
+    assert r["dates"] == 10 and r["placement"] == 10
+
+
+def test_french_plural_headings_recognised():
+    seq = score.section_sequence("EXPÉRIENCES PROFESSIONNELLES\nx\nFORMATIONS\ny\nCOMPÉTENCES\nz")
+    assert seq == ["experience", "education", "skills"]
+
+
+def test_spanish_heading_and_month_range():
+    assert score.heading_key("FORMACIÓN") == "education"
+    assert score.heading_key("EXPERIENCIAS") == "experience"
+    assert score.RANGE.search("Analista, enero 2019 – actualidad").group(0) == "enero 2019 – actualidad"
+
+
+def test_german_and_iso_months_are_ranges():
+    for text in ("März 2020 – Dezember 2022", "Okt. 2018 - aktuell", "2019-03 – 2021-06",
+                 "Mayo 2020 – en cours", "dic 2019 – presente"):
+        assert score.RANGE.fullmatch(text), text
+    assert score.RANGE.search("Chicago 2019") is None
