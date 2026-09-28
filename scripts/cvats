@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# CV ATS toolkit. Usage: cvats <render|extract|score|repeats|layout> [args]   (each supports --help)
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")" && pwd)"
+VENV="${CV_ATS_VENV:-$HOME/.cache/cv-ats/venv}"
+[ -x "$VENV/bin/python" ] || "$DIR/setup_env.sh" >/dev/null
+cmd="${1:-}"
+case "$cmd" in
+  render|extract|score|repeats|layout) shift; exec "$VENV/bin/python" "$DIR/$cmd.py" "$@" ;;
+  *) echo "usage: cvats <render|extract|score|repeats|layout> [args]  (each supports --help)" >&2; exit 2 ;;
+esac
