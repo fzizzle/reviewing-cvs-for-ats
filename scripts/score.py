@@ -77,10 +77,17 @@ def keyword_hits(text, keywords):
 
 
 def heading_key(line):
-    """Section key for a heading line, 'other' for an unknown ALL-CAPS heading, else None."""
+    """Section key for a heading line, 'other' for an unknown ALL-CAPS heading, else None.
+
+    A heading starts with a capital: a lowercase line such as "negotiation skills" is a wrapped
+    fragment of the line above, not a Skills heading.
+    """
     s = line.strip()
     words = s.split()
     if not 1 <= len(words) <= 6 or ":" in s or s.endswith((".", ",", ";")):
+        return None
+    first_letter = next((c for c in s if c.isalpha()), "")
+    if not first_letter.isupper():
         return None
     if ROLE_BLOCKLIST.search(s):
         return None

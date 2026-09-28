@@ -123,3 +123,13 @@ def test_short_synonyms_allow_plural_and_punctuation():
 def test_multiword_keywords_survive_line_breaks_and_slashes():
     kw = {"PM": ["project management"], "A/B": ["a/b test"]}
     assert score.keyword_hits("Led project\nmanagement and a/b testing", kw) == {"PM": True, "A/B": True}
+
+
+def test_lowercase_wrapped_fragment_is_not_a_heading():
+    # Repro: a bullet wrapped so "negotiation skills" sat on its own line; it read as a Skills
+    # heading, and the next role's dates were then flagged as "under skills".
+    assert score.heading_key("negotiation skills") is None
+    assert score.heading_key("Work experience") == "experience"
+    ok, bad = score.date_placement("Experience\nAcme Jan 2021 – Present\npresentation and\nnegotiation skills\n"
+                                   "Beta Jan 2019 – Feb 2021\nEducation\nBSc")
+    assert ok == 2 and bad == []

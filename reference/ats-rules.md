@@ -29,3 +29,4 @@ Format: `{"advert": "short label", "keywords": {"label": ["synonym", ...], ...}}
 ## Known tool limits
 - `cvats layout` misses orphan lines (a wrapped line holding 1–2 words) when line-height exceeds ~1.55 (its wrap test assumes line gap ≤ 1.55 × font size) — above that, Read the rendered PDF and check by eye.
 - `cvats repeats` builds 3-word phrases after dropping stopwords, months and bare numbers, across line and section breaks, so a flagged phrase may not be a literal quote — find it in the source before rewriting. `--allow` hides a phrase only when all three of its words are allowed.
+- `cvats score` treats a short line naming a section as a heading only when it starts with a capital, but a wrapped fragment that starts with one ("SQL skills" alone on a line) can still be misread as a heading — if `problems` shows dates under the wrong section, check the extracted text.
