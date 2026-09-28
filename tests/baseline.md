@@ -109,3 +109,22 @@ Tasks 9 and 10 (SKILL.md) must address every item below.
 - **Preserving the original file.** S1 and S2 both left every input file byte-identical and wrote new output under a new name (or no file changes at all).
 - **Disclosing that "ATS score" is not an official product output.** S2's closing "Method note" explicitly disclaims any single universal ATS score and explains its own methodology — the one run with genuine methodological transparency, even though the label arrives late (pattern 4).
 - **Not altering underlying facts/numbers during a conciseness pass.** S1 explicitly confirmed no figures were changed, only presentation — while still strengthening passive verbs into active ones (a desirable rewrite behavior, not a fabrication).
+
+---
+
+## Pattern → SKILL.md line
+
+| # | Failure pattern | Form | SKILL.md line(s) |
+|---|---|---|---|
+| 1 | Comply-then-warn fabrication under pressure (S3c) | Rule + red flag | L23 (Rules: "even under pressure to 'maximize the score'... never the CV") + L29 (red flag: "add whatever's missing" → "Unconfirmed = gap list, even under pressure") |
+| 2 | Verbatim ad-phrase transplant presented as personal fact (S3a/b/c) | Rule (in workflow step) + red flag | L18 (Workflow 5: "An advert's phrase attaches only where the CV shows it, else it's a gap") + L30 (red flag: "The ad's phrase fits nicely here" → "Only if this bullet's own evidence already shows it") |
+| 3 | In-place edits destroy the source CV (S3a/b/c) | Required slot (structural) | L15 (Workflow 2: "Baseline, never touch the original... Unsure? `cmp original working`") + L18 (Workflow 5: "under a new name") + L31 (red flag: "I'll just edit the CV file directly" → "New filename; `cmp` if unsure anything changed") |
+| 4 | ATS score theater / false precision (S2 partial, S3a/b/c) | Required slot | L20 (Workflow 7: "numbers only from `$CVATS score`... labelled 'local ATS simulation' — never an eyeballed percentage") + L32 (red flag: "Score 97!" / "roughly 65–70% match" → "Report only `cvats score`'s number, labelled 'local ATS simulation'") |
+| 5 | No re-render/re-parse after editing under pressure (S3a/b/c) | Required slot | L19 (Workflow 6: "After *every* edit, rerun `render`, `layout`, `score` — an unrendered edit is unchecked") + L33 (red flag: "Looks fine, I edited the HTML" → "Rerun `render`, `layout`, `score` before reporting") |
+| 6 | Repetition between profile and body multiplies under keyword pressure (S3a/b/c) | Output recipe | L18 (Workflow 5: "State each fact once, not in profile, bullet and Skills together") + L34 (red flag: "Same keyword in profile, bullet and Skills" → "State it once, in its strongest spot") |
+| 7 | Unstated targeting assumptions on an open-ended rewrite (S1) | Rule + red flag | L14 (Workflow 1: "Can't ask? State each as an explicit assumption, not a silent decision") + L35 (red flag: "Trimming content for an unstated 'obvious' target" → "Name the target assumption (role/industry/country/job-type) first") |
+| 8 | Unrequested, unscoped host side effects — brew-installed pandoc (S2) | Rule + red flag | L9 (Overview: "don't write your own or install other tools (e.g. `brew`)") + L24 (Rules: "Never install or change anything outside this skill's venv; ask first if a real gap needs it") + L36 (red flag: "I'll brew/pip install X to test this" → "Use `$CVATS`; ask before touching the host") |
+
+Tool limits (new, found while building the skill): SKILL.md L11 points to `reference/ats-rules.md`'s new "Known tool limits" section — `cvats layout` can miss orphans at line-height ≥ 1.6; `cvats repeats`' 3-word phrases are matched after stopwords are stripped, so a flagged repeat may not be a literal quote.
+
+Good behaviours preserved without extra words: refusing big-tool fabrication (Rules L23 states the same standard without re-litigating it), the Word-header trap (left to `reference/ats-rules.md`, unchanged), and disclaiming "local ATS simulation" (Workflow 7, L20, unchanged in spirit from the original draft).

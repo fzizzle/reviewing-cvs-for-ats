@@ -21,3 +21,7 @@
 - Don't chase 100. Missing keywords the person hasn't confirmed go in a "gaps to confirm" list, never into the CV.
 - Check scorer surprises by reading the extracted text (`cvats extract CV --out dir`) before trusting or dismissing them.
 - Don't upload a CV to online ATS checkers unless the person explicitly agrees. It's personal data sent to a third party.
+
+## Known tool limits
+- `cvats layout` can miss orphan lines (a wrapped line left holding 1–2 words) when the CSS line-height is ≥ 1.6 — check visually too at that setting.
+- `cvats repeats`' 3-word phrase match runs after stopwords are stripped, so a flagged "repeat" may not be a literal quote in the CV — read the source text before deciding it's real repetition.
