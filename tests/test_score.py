@@ -175,3 +175,39 @@ def test_keyword_example_keeps_one_tool_per_label():
 def test_percentage_is_not_an_international_prefix():
     r = score.contact_checks("07700 900123\nGrew sales +25%")
     assert r["phone"] and r["international_phone"] is False
+
+
+FULL = ("Jane Doe\nParis, France · +33 6 39 98 12 34 · jane@example.com · linkedin.com/in/jane\n"
+        "EXPERIENCE\nEngineer\nJan 2020 – Mar 2021\nEDUCATION\nBSc\nSKILLS\nPython")
+KW = {"SQL": ["sql"], "Python": ["python"]}
+NO_CITY = FULL.replace("Paris, France · ", "")
+
+
+def test_problems_print_a_shared_message_once_with_its_parsers():
+    rows = {"a": score.score_text(NO_CITY, 1, keywords=KW), "b": score.score_text(NO_CITY, 1, keywords=KW),
+            "c": score.score_text(FULL, 1, keywords=KW)}
+    lines = score.problems(rows)
+    assert "- contact items not found: location (a, b)" in lines
+    assert sum("contact items not found" in line for line in lines) == 1
+
+
+def test_problems_say_all_parsers_when_every_parser_hits():
+    rows = {n: score.score_text(NO_CITY, 1) for n in ("a", "b")}
+    assert "- contact items not found: location (all parsers)" in score.problems(rows)
+
+
+def test_keyword_missed_by_some_parsers_is_a_layout_problem():
+    rows = {"a": score.score_text(FULL, 1, keywords=KW),
+            "b": score.score_text(FULL.replace("Python", "P y t h o n"), 1, keywords=KW)}
+    lines = score.problems(rows)
+    assert "- advert keywords not found: SQL" in lines
+    assert "- advert keywords some parsers miss (a layout problem, not a gap): Python (b)" in lines
+
+
+def test_section_order_disagreement_is_one_line(monkeypatch):
+    monkeypatch.setattr(score, "extract_all", lambda path, **_: (
+        {"a": "EXPERIENCE\nx\nEDUCATION\ny\nSKILLS\nz", "b": "EDUCATION\ny\nEXPERIENCE\nx\nSKILLS\nz",
+         "c": "EXPERIENCE\nx\nEDUCATION\ny\nSKILLS\nz"}, 1))
+    lines = [line for line in score.problems(score.score_cv("dummy.txt")) if "disagree" in line]
+    assert lines == ["- parsers disagree on section order: a, c ['experience', 'education', 'skills']; "
+                     "b ['education', 'experience', 'skills']"]

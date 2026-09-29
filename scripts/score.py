@@ -197,28 +197,64 @@ def table(title, rows):
     return "\n".join(out)
 
 
+def row_messages(r):
+    """Problem messages for one parser's row; problems() groups identical ones across parsers."""
+    if r["missing_sections"]:
+        yield f"section headings not recognised: {', '.join(r['missing_sections'])}"
+    if r["garbled"]:
+        yield f"letter-spaced text read as separate letters: {r['garbled'][:3]}"
+    if r["misplaced_dates"]:
+        yield f"dates landed under the wrong section: {r['misplaced_dates']}"
+    if r["missing_contact"]:
+        yield f"contact items not found: {', '.join(r['missing_contact'])}"
+    if r.get("ligatures"):
+        yield (f"extracted {r['ligatures']} ligature glyph(s) (e.g. one glyph for 'fi'); "
+               "add font-variant-ligatures: none")
+
+
+def _who(names, rows):
+    return "all parsers" if len(rows) > 1 and len(names) == len(rows) else ", ".join(names)
+
+
+def keyword_problems(rows):
+    """'not found' lines for keywords every parser missed; 'some parsers miss' for the rest."""
+    missed = {}
+    for name, r in rows.items():
+        for label in r["missing_keywords"]:
+            missed.setdefault(label, []).append(name)
+    everywhere = [k for k, names in missed.items() if len(names) == len(rows)]
+    partly = [f"{k} ({', '.join(names)})" for k, names in missed.items() if len(names) < len(rows)]
+    out = []
+    if everywhere:
+        out.append("- advert keywords not found: " + ", ".join(everywhere))
+    if partly:
+        out.append("- advert keywords some parsers miss (a layout problem, not a gap): " + ", ".join(partly))
+    return out
+
+
 def problems(rows):
+    """Problem lines for a {parser: row} table.
+
+    A message several parsers share prints once, followed by the parsers that hit it ("all parsers"
+    when every parser did), so the list stays short enough to report in full.
+    """
     empty = [name for name, r in rows.items() if r["words"] < MIN_WORDS]
     out = [f"- {NO_TEXT} ({', '.join(empty)})"] if empty else []
+    grouped = {}
     for name, r in rows.items():
-        if r["missing_sections"]:
-            out.append(f"- {name}: section headings not recognised: {', '.join(r['missing_sections'])}")
-        if r["garbled"]:
-            out.append(f"- {name}: letter-spaced text read as separate letters: {r['garbled'][:3]}")
-        if r["misplaced_dates"]:
-            out.append(f"- {name}: dates landed under the wrong section: {r['misplaced_dates']}")
-        if r["order"] == 0:
-            out.append(f"- {name}: parsers disagree on section order: {r['sequence']}")
-        if r["missing_contact"]:
-            out.append(f"- {name}: contact items not found: {', '.join(r['missing_contact'])}")
-        if r.get("ligatures"):
-            out.append(f"- parser {name} extracted ligature glyphs ({r['ligatures']}, e.g. one glyph for 'fi'); "
-                       "add font-variant-ligatures: none")
+        for msg in row_messages(r):
+            grouped.setdefault(msg, []).append(name)
+    out += [f"- {msg} ({_who(names, rows)})" for msg, names in grouped.items()]
+    if any(r["order"] == 0 for r in rows.values()):
+        seqs = {}
+        for name, r in rows.items():
+            seqs.setdefault(tuple(r["sequence"]), []).append(name)
+        out.append("- parsers disagree on section order: "
+                   + "; ".join(f"{', '.join(names)} {list(seq)}" for seq, names in seqs.items()))
     first = next(iter(rows.values()))
     if first.get("header_footer_text"):
         out.append(f"- Word header/footer holds text many ATS skip: {first['header_footer_text']!r}")
-    if first["missing_keywords"]:
-        out.append("- advert keywords not found: " + ", ".join(first["missing_keywords"]))
+    out += keyword_problems(rows)
     return out
 
 
