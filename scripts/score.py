@@ -95,8 +95,8 @@ REGION_CODES = ("UK GB US USA UAE "  # plus US states and Canadian provinces, as
                 "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM "
                 "NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC AB BC MB NB NL NS ON PE QC SK").split()
 _PLACES = "|".join(sorted(map(re.escape, COUNTRY_NAMES), key=len, reverse=True))
-LOCATION = re.compile(r"(?<!\w)[A-ZÀ-Ý][\w''.-]*(?:[ -][\w''.-]+){0,3},\s*"
-                      rf"(?:(?i:{_PLACES})|{'|'.join(REGION_CODES)})(?![\w-])")
+LOCATION = re.compile("(?<!\\w)[A-ZÀ-Ý][\\w'\\u2019.-]*(?:[ -][\\w'\\u2019.-]+){0,3},\\s*"
+                      f"(?:(?i:{_PLACES})|{'|'.join(REGION_CODES)})(?![\\w-])")
 PARTICLES = {"van", "der", "den", "de", "del", "della", "von", "da", "di", "du", "la", "le", "bin", "binti",
              "al", "el", "ben", "dos", "das", "y"}
 NOT_A_NAME = re.compile(r"\b(?:cv|curriculum|vitae|r[ée]sum[ée]|lebenslauf|profile|contact)\b", re.I)

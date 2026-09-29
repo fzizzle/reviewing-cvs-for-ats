@@ -334,3 +334,8 @@ def test_first_line_should_be_the_name(first, ok):
 def test_name_problem_reported_for_a_full_cv():
     r = score.score_text("Curriculum Vitae\n" + FULL + "\nWord" * 30, 1)
     assert any(line.startswith("- first line isn't a name ('Curriculum Vitae')") for line in score.problems({"a": r}))
+
+
+def test_location_keeps_a_curly_apostrophe():
+    # Curly apostrophe U+2019, as in French names like L'Aquila
+    assert score.find_location("Sam Taylor\nData Analyst\nL’Aquila, Italy") == "L’Aquila, Italy"
