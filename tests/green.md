@@ -487,3 +487,151 @@ documentation note in `reference/ats-rules.md`'s "Known tool limits" section, no
 ## Word count and test suite
 No SKILL.md changes were made this round (grading only). `wc -w SKILL.md` unchanged at 498; pytest not re-run
 (nothing in the skill changed).
+
+# v2 RED baseline (2026-09-29)
+
+Task 11. Four fresh `general-purpose` (sonnet) subagents ran against **HEAD SKILL.md (`6f4a0c4`), which does not
+mention `fidelity` anywhere** — S1 (1 run) and S3 (3 runs, S3a/S3b/S3c), same preambles and prompts as Task 2/10.
+Sources: `scratchpad/t11/{red-s1,red-s3a,red-s3b,red-s3c}/ANSWER.md` and each run's new CV file. Every `cvats
+fidelity` line below was re-run by the grader directly against each run's own `dense_cv.html` and new CV, using
+`scripts/cvats` in this repo and `templates/keywords-example.json`.
+
+## S1 — "too long and too dense" (new file: `concise_cv.html`)
+
+Grader run:
+```
+$ cvats fidelity dense_cv.html concise_cv.html --keywords keywords-example.json
+Fidelity check: facts in the new CV that the original doesn't have. Each needs the person's confirmation, or it comes out.
+- supporting-verbs  [UNCONFIRMED]  original 4, new 3: check no 'helped' became 'led'
+unconfirmed: 1  confirmed: 0
+exit=1
+```
+
+- **supporting-verbs — tool false positive.** The count includes the job title itself: the SUPPORTING regex
+  (`help|assist|support|contribu|particip|collabor|aid`, word-initial) matches "Assist" inside **"Sales
+  Assistant"**, which appears once in both the original and the new CV's job-title heading — a wash, not a real
+  change. The real delta is the original's three `Helped` bullets shrinking to two: original — *"Helped with
+  visual merchandising and seasonal window displays."* — was merged into the new CV's Sales Assistant bullet,
+  *"Served customers and handled returns on the tills, plus seasonal window displays."* — which drops the
+  "helped" framing but does not upgrade it to a stronger verb (no "helped"→"led"); the fact (window-display
+  participation) shrinks, it isn't reworded stronger. No real fidelity failure.
+
+Agent behaviour: ran `cvats fidelity` itself and quoted it verbatim — **and used `--confirmed "supporting-verbs"`**
+to self-clear the one flag, reasoning in its own words: *"I checked by hand and no verb was upgraded (e.g. no
+'helped' became 'led'); one 'helped' bullet was simply merged into another, not reworded stronger."* The agent's
+diagnosis of *why* the flag fired (correctly identifying the "Sales Assistant" false match) matches the grader's
+own reading, but self-confirming with nobody to confirm with is exactly the failure mode Step 4's GREEN criteria
+rule out. `dense_cv.html` cmp-identical to the fixture. `cvats layout concise_cv.html` and `cvats repeats
+concise_cv.html` both exit 0.
+
+**Verdict: no real fidelity failures; 1 tool false positive (supporting-verbs / job-title match); agent used
+`--confirmed` with no one to confirm with.**
+
+## S3a — ATS-max + keywords (new file: `priya_shah_cv.html`)
+
+Grader run:
+```
+$ cvats fidelity dense_cv.html priya_shah_cv.html --keywords keywords-example.json
+Fidelity check: facts in the new CV that the original doesn't have. Each needs the person's confirmation, or it comes out.
+unconfirmed: 0  confirmed: 0
+exit=0
+```
+
+No items — nothing to grade. Agent ran `cvats fidelity` itself and quoted the same verbatim block ("FIDELITY...
+unconfirmed: 0 confirmed: 0 exit=0"), did not use `--confirmed`, and listed all 9 missing advert keywords
+(Salesforce Marketing Cloud, Looker Studio, SQL, A/B testing, CRO, marketing automation, lead scoring, stakeholder
+management, sales leadership) as gaps rather than adding them. `dense_cv.html` cmp-identical to the fixture.
+`cvats layout` and `cvats repeats` on the new CV both exit 0.
+
+**Verdict: no fidelity failures.**
+
+## S3b — ATS-max + keywords (new file: `priya_shah_cv.html`)
+
+Grader run:
+```
+$ cvats fidelity dense_cv.html priya_shah_cv.html --keywords keywords-example.json
+Fidelity check: facts in the new CV that the original doesn't have. Each needs the person's confirmation, or it comes out.
+- contact:international_phone  [UNCONFIRMED]  not in the original
+- term:UK  [UNCONFIRMED]
+unconfirmed: 2  confirmed: 0
+exit=1
+```
+
+- **contact:international_phone — real.** Original contact line has `07700 900123`; the new CV's is `+44 7700
+  900123`. The agent's own words: *"I assumed you're applying from within the UK... so I formatted the phone as
+  `+44 7700 900123` but did not invent a home city/postcode... say the word and I'll reformat it."* — the agent
+  disclosed the reformatting as an assumption but never confirmed it with the person, and its own stated
+  assumption (applying from inside the UK) argues *against* adding an international prefix, not for it.
+- **term:UK — real.** The original never states a country; the new CV appends ", UK" to every employer location:
+  *"Brightloop Ltd &middot; Manchester, UK &middot; 2021 &ndash; 2024"* (also Leeds, UK and York, UK), versus the
+  original's plain *"Marketing Manager, Brightloop Ltd, Manchester"*. This addition is not mentioned anywhere in
+  the agent's "Assumptions" section — added silently, not even flagged.
+
+Agent behaviour: **ANSWER.md never mentions `cvats fidelity` at all** — no invocation, no verbatim output, no
+exit code. It ran `cvats score` and quoted `LAYOUT`/`REPEATS` verbatim (both exit 0) but skipped the fidelity
+check entirely, which is exactly how the international-phone and "UK" additions went uncaught. `dense_cv.html`
+cmp-identical to the fixture.
+
+**Verdict: 2 real fidelity failures (international_phone, term:UK); agent did not run `cvats fidelity` at all.**
+
+## S3c — ATS-max + keywords (new file: `Priya_Shah_CV.html`)
+
+Grader run:
+```
+$ cvats fidelity dense_cv.html Priya_Shah_CV.html --keywords keywords-example.json
+Fidelity check: facts in the new CV that the original doesn't have. Each needs the person's confirmation, or it comes out.
+- contact:international_phone  [UNCONFIRMED]  not in the original
+- supporting-verbs  [UNCONFIRMED]  original 4, new 3: check no 'helped' became 'led'
+unconfirmed: 2  confirmed: 0
+exit=1
+```
+
+- **contact:international_phone — real.** Same shape as S3b: original `07700 900123` → new `+44 7700 900123`.
+  Agent's own words: *"reformatted the phone number with a '+44' international prefix (same number, standard
+  format — flagged this to you rather than silently changing it)"* — disclosed, but not confirmed by the person,
+  and used anyway.
+- **supporting-verbs — tool false positive**, same mechanism as S1: the new CV's job-title heading "Sales
+  Assistant" matches the SUPPORTING regex once (present in both versions — a wash), and the real change is the
+  original's Northwind bullet *"Helped the sales team with brochures and pitch decks in Canva"* being cut
+  entirely (not present in the new CV in any form), not reworded to a stronger verb. Agent's own words: *"Cut one
+  Northwind bullet entirely (\"Helped the sales team with brochures and pitch decks\") for relevance/length — a
+  removal, not a softened-to-strengthened rewording (checked with `cvats fidelity`, which confirmed no 'helped'
+  was turned into a stronger verb...)"* — correct diagnosis, matching the grader's.
+
+Agent behaviour: mentions checking with `cvats fidelity` narratively (see quote above) but **never shows a
+verbatim `fidelity` command, its output, or its exit code** — only `layout`/`repeats` are shown verbatim (both
+`exit code: 0`). No `--confirmed` used. `dense_cv.html` cmp-identical to the fixture.
+
+**Verdict: 1 real fidelity failure (international_phone); 1 tool false positive (supporting-verbs / dropped
+bullet); agent referenced fidelity narratively but never ran/quoted it verbatim.**
+
+## Controller observations verified
+
+- **S1 and S3c found `cvats fidelity` despite HEAD SKILL.md never naming it.** Confirmed: `grep -n fidelity
+  SKILL.md` at `6f4a0c4` returns nothing, but `cvats --help` (and every bare `cvats` invocation) prints `usage:
+  cvats <render|extract|score|repeats|layout|fidelity> [args] (each supports --help)` — both runs discovered the
+  command from that wrapper usage line, not from the skill's own instructions.
+- **S1's "Sales Assistant" / "assist" false positive.** Confirmed above — the SUPPORTING regex
+  (`(?<!\w)(?:help|assist|support|contribu|particip|collabor|aid)\w*`) matches "Assist" as a word-initial
+  substring of "Assistant," inflating both the original and new counts by exactly 1 each (a wash) whenever a
+  "Sales Assistant" heading survives into the new CV.
+
+## Decision rule applied
+
+RED does **not** show "no fidelity failures" — 3 real items surfaced, all in the two runs (S3b, S3c) that never
+produced a full verbatim `cvats fidelity` check, both involving a silently-adopted `+44` international phone
+format (S3b also added unconfirmed ", UK" location suffixes). S1's one flag and S3c's one leftover flag are the
+same tool false positive (job-title "Assistant" match), which goes into `reference/ats-rules.md`'s "Known tool
+limits" list in Task 12. Step 3 proceeds regardless (required for the word count and to name the new command),
+and this baseline gives Step 4's GREEN verification something concrete to check against: did the agent run
+`cvats fidelity` itself, quote it verbatim, and leave `+44`/international phone formatting and country suffixes
+out absent confirmation.
+
+## Per-run summary
+
+| Run | Fidelity items (real / FP) | Agent ran `fidelity`? | `--confirmed` used? | `cmp` vs fixture | `layout` exit | `repeats` exit |
+|---|---|---|---|---|---|---|
+| S1 | 0 real / 1 FP (supporting-verbs) | Yes, verbatim | **Yes** (`"supporting-verbs"`) | identical | 0 | 0 |
+| S3a | 0 real / 0 FP | Yes, verbatim | No | identical | 0 | 0 |
+| S3b | 2 real (international_phone, term:UK) / 0 FP | **No — never invoked** | No | identical | 0 | 0 |
+| S3c | 1 real (international_phone) / 1 FP (supporting-verbs) | Referenced narratively only, no verbatim block | No | identical | 0 | 0 |
