@@ -1,7 +1,10 @@
+import pathlib
+
 import pytest
 
 import cvlib
 import layout
+import score
 
 
 def L(top, x0, x1, text, size=9.0):
@@ -135,3 +138,72 @@ def test_margins_consider_every_page_not_just_the_first(tmp_path):
     assert report["pages"] == 2
     assert abs(report["margins_mm"]["left"] - report["margins_mm"]["right"]) <= 3
     assert not any("margins differ" in p for p in report["problems"])
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+FIX = ROOT / "tests" / "fixtures"
+try:
+    cvlib.find_chrome()
+    HAVE_CHROME = True
+except RuntimeError:
+    HAVE_CHROME = False
+needs_chrome = pytest.mark.skipif(not HAVE_CHROME, reason="needs Chrome/Chromium/Edge")
+
+
+def W(top, *spans, size=10):
+    """A page_lines()-style line from (x0, x1, text) word spans."""
+    words = [{"x0": a, "x1": b, "top": top, "bottom": top + size, "text": t} for a, b, t in spans]
+    return {"top": top, "bottom": top + size, "x0": words[0]["x0"], "x1": words[-1]["x1"], "size": size,
+            "words": words}
+
+
+def test_gutter_found_between_columns():
+    lines = [W(100 + 12 * i, (50, 200, "left text"), (260, 500, "right text")) for i in range(8)]
+    g = layout.find_gutter(lines)
+    assert g and 200 < g["x"] < 260 and g["lines"] == 8 and g["right"][0] == "right text"
+
+
+def test_word_spaces_are_not_a_gutter():
+    # single column: words 3pt apart, and the gaps drift from line to line
+    lines = [W(100 + 12 * i, *[(50 + 40 * j + 7 * i, 87 + 40 * j + 7 * i, "word") for j in range(11)])
+             for i in range(10)]
+    assert layout.find_gutter(lines) is None
+
+
+def test_right_aligned_dates_found_from_word_gaps():
+    lines = [W(100, (50, 250, "Engineer, Acme Ltd"), (480, 540, "2019 – 2021")),
+             W(114, (50, 540, "Built things across the whole width of the page"))]
+    assert layout.right_aligned_dates(lines, 540) == ["2019 – 2021"]
+
+
+@needs_chrome
+def test_two_column_layout_is_flagged(tmp_path):
+    found = layout.pdf_findings(cvlib.render_pdf(FIX / "two_column_cv.html", tmp_path / "t.pdf"))
+    assert any("side-by-side columns" in f for f in found), found
+    assert not any("right-aligned" in f for f in found), found
+
+
+@needs_chrome
+def test_right_aligned_dates_are_flagged(tmp_path):
+    found = layout.pdf_findings(cvlib.render_pdf(FIX / "dense_cv.html", tmp_path / "d.pdf"))
+    assert any("dates in a right-aligned column" in f for f in found), found
+    assert not any("side-by-side" in f for f in found), found
+
+
+@needs_chrome
+def test_hidden_text_is_flagged_but_white_on_dark_is_not(tmp_path):
+    found = layout.pdf_findings(cvlib.render_pdf(FIX / "hidden_text_cv.html", tmp_path / "h.pdf"))
+    hidden = [f for f in found if "invisible" in f]
+    assert len(hidden) == 1 and "kubernetes" in hidden[0] and "Robin" not in hidden[0], found
+
+
+@needs_chrome
+def test_template_has_no_layout_traps(tmp_path):
+    assert layout.pdf_findings(cvlib.render_pdf(ROOT / "templates" / "cv-template.html", tmp_path / "t.pdf")) == []
+
+
+@needs_chrome
+def test_score_and_layout_report_layout_traps(tmp_path, capsys):
+    assert any("side-by-side columns" in line for line in score.problems(score.score_cv(FIX / "two_column_cv.html")))
+    assert layout.main([str(FIX / "two_column_cv.html")]) == 1
+    assert "side-by-side columns" in capsys.readouterr().out

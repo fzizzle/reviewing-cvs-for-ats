@@ -2,7 +2,7 @@
 
 | Rule | Why |
 |---|---|
-| Single column; no tables or text boxes for layout | Parsers read tables and columns in unpredictable order |
+| Single column; no tables or text boxes for layout | Parsers read tables and columns in unpredictable order (`cvats layout` flags side-by-side columns) |
 | Contact details in the body, not a Word header/footer | Many ATS skip headers and footers (`cvats score` warns) |
 | Standard headings: Profile, Experience, Education, Projects, Skills, Languages | Parsers map sections by name |
 | Headings as real text with letter-spacing ≤ 0.04em | Wider spacing extracts as "E X P E R I E N C E" |
@@ -13,6 +13,7 @@
 | Job title on its own line, then "Employer · City · Dates" | Keeps title, employer and dates together |
 | Keywords in bullets as well as in Skills | Context beats keyword lists |
 | Text-based PDF (from HTML or Word), never scanned images | Images have no text to parse |
+| No hidden text (white on white, under 4pt, off-page) | Parsers read it; recruiters who open the file see keyword stuffing (`cvats layout` flags it) |
 | File name `Firstname_Lastname_CV.pdf` | Recruiters search by name |
 
 ## Building `kw.json`

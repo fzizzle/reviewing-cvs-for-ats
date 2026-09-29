@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from cvlib import MIN_WORDS, NO_TEXT, cli, docx_header_footer_text, docx_textbox_text, extract_all, normalise  # noqa: E402
+from layout import pdf_findings  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
@@ -313,7 +314,7 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
 
 
 def score_cv(path, keywords=None, max_pages=2, required=()):
-    texts, pages = extract_all(path)
+    texts, pages = extract_all(path, pdf_hook=pdf_findings)
     texts = normalise(texts)  # idempotent; keeps extract_all's ligature counts
     expected = max(len(RANGE.findall(t)) for t in texts.values()) or 1
     consistent = len({tuple(section_sequence(t)) for t in texts.values()}) == 1
@@ -321,6 +322,7 @@ def score_cv(path, keywords=None, max_pages=2, required=()):
                           order_consistent=consistent, max_pages=max_pages, required=required) for n, t in texts.items()}
     for n, r in rows.items():
         r["ligatures"] = texts.ligatures.get(n, 0)
+        r["layout"] = list(texts.pdf_findings)
     if str(path).lower().endswith(".docx"):
         hf, boxed = docx_header_footer_text(path), docx_textbox_text(path)
         for r in rows.values():
@@ -394,6 +396,7 @@ def problems(rows):
     """
     empty = [name for name, r in rows.items() if r["words"] < MIN_WORDS]
     out = [f"- {NO_TEXT} ({', '.join(empty)})"] if empty else []
+    out += [f"- {finding}" for finding in next(iter(rows.values())).get("layout", [])]
     grouped = {}
     for name, r in rows.items():
         for msg in row_messages(r):

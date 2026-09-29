@@ -212,8 +212,10 @@ LIGATURES = re.compile("[\ufb00-\ufb06]")  # ff, fi, fl, ffi, ffl, long-st, st l
 
 
 class Extracted(dict):
-    """{parser: text}, plus .ligatures = {parser: ligature glyphs found before normalising}."""
+    """{parser: text}, plus .ligatures = {parser: ligature glyphs found before normalising} and
+    .pdf_findings = what extract_all's pdf_hook returned for the rendered PDF ([] without one)."""
     ligatures = {}
+    pdf_findings = []
 
 
 def normalise(texts):
@@ -225,13 +227,15 @@ def normalise(texts):
     out = Extracted({n: unicodedata.normalize("NFKC", t) for n, t in texts.items()})
     prior = getattr(texts, "ligatures", {})
     out.ligatures = {n: prior.get(n, 0) + len(LIGATURES.findall(t)) for n, t in texts.items()}
+    out.pdf_findings = getattr(texts, "pdf_findings", [])
     return out
 
 
-def extract_all(path):
+def extract_all(path, pdf_hook=None):
     """Return ({parser: text}, page count or None) for a .pdf, .html, .docx, .txt or .md CV.
 
     Texts are NFKC-normalised; the returned dict's .ligatures holds each parser's ligature count.
+    pdf_hook(pdf_path), if given, runs while the PDF exists; its result is kept in .pdf_findings.
     """
     path = Path(path)
     ext = path.suffix.lower()
@@ -241,7 +245,9 @@ def extract_all(path):
     with tempfile.TemporaryDirectory() as work:
         pdf = as_pdf(path, work)
         if pdf is not None:
-            return normalise({name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()}), page_count(pdf)
+            texts = normalise({name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()})
+            texts.pdf_findings = pdf_hook(pdf) if pdf_hook else []
+            return texts, page_count(pdf)
     if ext == ".docx":
         return normalise({"python-docx": docx_text(path), "docx-xml": docx_xml_text(path)}), None
     return normalise({"text": path.read_text(encoding="utf-8")}), None

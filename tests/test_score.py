@@ -71,7 +71,7 @@ def test_line_wrap_variant_does_not_break_order():
 
 
 def test_score_cv_zeroes_order_when_parsers_disagree(monkeypatch):
-    def fake_extract_all(path):
+    def fake_extract_all(path, **_):
         return ({"a": "EXPERIENCE\nEngineer\nEDUCATION\nBSc\nSKILLS\nPython",
                  "b": "EDUCATION\nBSc\nEXPERIENCE\nEngineer\nSKILLS\nPython"}, 1)
     monkeypatch.setattr(score, "extract_all", fake_extract_all)
@@ -81,7 +81,7 @@ def test_score_cv_zeroes_order_when_parsers_disagree(monkeypatch):
 
 def test_score_cv_full_order_when_parsers_agree(monkeypatch):
     text = "EXPERIENCE\nEngineer\nEDUCATION\nBSc\nSKILLS\nPython"
-    monkeypatch.setattr(score, "extract_all", lambda path: ({"a": text, "b": text}, 1))
+    monkeypatch.setattr(score, "extract_all", lambda path, **_: ({"a": text, "b": text}, 1))
     rows = score.score_cv("dummy.txt")
     assert rows["a"]["order"] == 10 and rows["b"]["order"] == 10
 
@@ -92,7 +92,7 @@ LIGATURE_CV = "{}\nx\nExperience\nEngineer\nEducation\nBSc\nSkills\nPython"
 def test_ligature_glyphs_are_normalised_before_scoring(monkeypatch):
     # Repro: a parser that kept the fi-ligature glyph (U+FB01) missed the "Profile" heading, so the
     # parsers "disagreed" on section order and both rows lost all 10 order points.
-    monkeypatch.setattr(score, "extract_all", lambda path: (
+    monkeypatch.setattr(score, "extract_all", lambda path, **_: (
         {"a": LIGATURE_CV.format("Pro\ufb01le"), "b": LIGATURE_CV.format("Profile")}, 1))
     rows = score.score_cv("dummy.txt")
     assert rows["a"]["order"] == 10 and rows["b"]["order"] == 10

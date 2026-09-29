@@ -3,13 +3,15 @@
 
 Reports page count, body font size (most common glyph size), smallest text, margins (mm),
 how empty the last page is, and orphan lines: a wrapped bullet or paragraph whose last line
-holds only 1-2 words. Input: .pdf, or .html (rendered with headless Chrome first).
+holds only 1-2 words, side-by-side columns, dates in a right-aligned column, and invisible
+text (white, under 4pt or off-page). Input: .pdf, or .html (rendered with headless Chrome first).
 Exit code 1 when a check fails.
 
 Usage: cvats layout CV [--max-pages N] [--min-body-pt 9.5]
 """
 import argparse
 import collections
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -77,6 +79,102 @@ def find_orphans(lines, right_edge, max_words=2, slack=40, gap_factor=1.55):
     return orphans
 
 
+DATEISH = re.compile(r"(?:19|20)\d{2}|present|current|now|aujourd|heute|actual", re.I)
+
+
+def find_gutter(lines, min_run=6, half_width=4, step=2):
+    """The strongest vertical gutter on a page, or None.
+
+    A gutter is an x position where, for min_run consecutive lines, no word crosses a band
+    2*half_width wide, with text left of it on at least 3 of those lines and right of it on at
+    least 3. Word spaces are narrower than the band, so single-column text never qualifies.
+    Returns {"x", "lines", "right"}: right is the text right of the gutter, line by line.
+    """
+    if not lines:
+        return None
+    left, right = min(line["x0"] for line in lines), max(line["x1"] for line in lines)
+    margin = 0.15 * (right - left)
+    best, x = None, left + margin
+    while x <= right - margin:
+        run, lefts, rights = [], 0, 0
+        for line in lines:
+            if any(w["x0"] < x + half_width and w["x1"] > x - half_width for w in line["words"]):
+                run, lefts, rights = [], 0, 0
+                continue
+            run.append(line)
+            lefts += any(w["x1"] <= x for w in line["words"])
+            rights += any(w["x0"] >= x for w in line["words"])
+            if len(run) >= min_run and lefts >= 3 and rights >= 3 and (best is None or len(run) > best["lines"]):
+                best = {"x": round(x), "lines": len(run), "run": list(run)}
+        x += step
+    if best is None:
+        return None
+    texts = (" ".join(w["text"] for w in line["words"] if w["x0"] >= best["x"]) for line in best.pop("run"))
+    best["right"] = [t for t in texts if t]
+    return best
+
+
+def right_aligned_dates(lines, right_edge, min_gap_em=2.5, slack=15):
+    """Dates pushed to the right edge, far from the rest of their line (flex, grid or tab alignment)."""
+    found = []
+    for line in lines:
+        words = sorted(line["words"], key=lambda w: w["x0"])
+        for a, b in zip(words, words[1:]):
+            if b["x0"] - a["x1"] > min_gap_em * line["size"]:
+                tail = " ".join(w["text"] for w in words if w["x0"] >= b["x0"])
+                if DATEISH.search(tail) and line["x1"] >= right_edge - slack:
+                    found.append(tail)
+                break
+    return found
+
+
+def _is_white(color):
+    if not isinstance(color, (list, tuple)):
+        color = (color,)
+    if not color or not all(isinstance(v, (int, float)) for v in color):
+        return False  # pattern fills, unknown colour spaces
+    return max(color) <= 0.05 if len(color) == 4 else min(color) >= 0.95  # CMYK, else grey/RGB
+
+
+def invisible_words(page, min_pt=4):
+    """Words a reader can't see but a parser still reads: white text with no dark shape behind it,
+    text under min_pt, or text off the page."""
+    fills = [s for s in page.rects + page.curves if s.get("fill") and not _is_white(s.get("non_stroking_color"))]
+    out = []
+    for w in page.extract_words(extra_attrs=["non_stroking_color", "size"]):
+        off = w["x1"] < 0 or w["x0"] > page.width or w["bottom"] < 0 or w["top"] > page.height
+        white = _is_white(w["non_stroking_color"]) and not any(
+            s["x0"] <= w["x0"] and s["x1"] >= w["x1"] and s["top"] <= w["top"] and s["bottom"] >= w["bottom"]
+            for s in fills)
+        if off or white or w["size"] < min_pt:
+            out.append(w["text"])
+    return out
+
+
+def pdf_findings(pdf_path):
+    """ATS layout traps per page: side-by-side columns, right-aligned dates and invisible text."""
+    import pdfplumber
+    out = []
+    with pdfplumber.open(str(pdf_path)) as doc:
+        for n, page in enumerate(doc.pages, 1):
+            lines = page_lines(page)
+            if not lines:
+                continue
+            dates = right_aligned_dates(lines, max(line["x1"] for line in lines))
+            if len(dates) >= 2:
+                out.append(f"page {n}: {len(dates)} dates in a right-aligned column (e.g. {dates[0]!r}); some ATS "
+                           "detach them from the job — put them inline after the employer")
+            gutter = find_gutter(lines)
+            if gutter and sum(bool(DATEISH.search(t)) for t in gutter["right"]) < 0.6 * len(gutter["right"]):
+                out.append(f"page {n}: side-by-side columns over {gutter['lines']} lines (right column starts "
+                           f"{gutter['right'][0][:40]!r}); ATS may read across both — use one column")
+            hidden = invisible_words(page)
+            if hidden:
+                out.append(f"page {n}: {len(hidden)} invisible word(s) a parser still reads "
+                           f"({' '.join(hidden[:6])!r}) — remove hidden text")
+    return out
+
+
 def check(pdf_path, max_pages=2, min_body_pt=9.5):
     import pdfplumber
     sizes, orphans = collections.Counter(), []
@@ -117,6 +215,7 @@ def check(pdf_path, max_pages=2, min_body_pt=9.5):
         p.append(f"page is {report['last_page_empty_pct']}% empty at the bottom: room for larger text or spacing")
     if orphans:
         p.append(f"{len(orphans)} orphan line(s)")
+    p.extend(pdf_findings(pdf_path))
     return report
 
 
