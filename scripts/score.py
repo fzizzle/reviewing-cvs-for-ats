@@ -2,7 +2,7 @@
 """Local ATS simulation for a CV.
 
 Extracts the CV with several parsers (pypdf, pdfminer, pdfplumber, pymupdf for PDF/HTML;
-python-docx for .docx; raw text for .txt/.md) and scores each extraction:
+python-docx and docx-xml for .docx; raw text for .txt/.md) and scores each extraction:
 
   parse quality /65  contact 15, sections 15, section order 10, dates 10, date placement 10,
                      length 5, minus up to 15 for letter-spaced (garbled) text and unreadable glyphs

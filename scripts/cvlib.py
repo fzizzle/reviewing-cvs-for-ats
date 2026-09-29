@@ -146,17 +146,22 @@ def docx_text(path):
 MC_FALLBACK = "{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback"
 
 
+RUN_MARKS = {"tab": "\t", "br": "\n", "cr": "\n"}  # w:tab/w:br/w:cr rendered as their text equivalent
+
+
 def docx_xml_text(path):
     """Every paragraph's own text in XML order, text boxes included: what a lenient ATS reads."""
     import docx
     from docx.oxml.ns import qn
     d = docx.Document(str(path))
+    tags = [qn(f"w:{t}") for t in ("t", "tab", "br", "cr")]
     lines = []
     for p in d.element.body.iter(qn("w:p")):
         if any(a.tag == MC_FALLBACK for a in p.iterancestors()):
             continue  # Word stores each text box twice; the Fallback copy is the duplicate
-        lines.append("".join(t.text or "" for t in p.iter(qn("w:t"))
-                             if next(t.iterancestors(qn("w:p"))) is p))
+        lines.append("".join(
+            RUN_MARKS.get(el.tag.rsplit("}", 1)[-1], el.text or "") for el in p.iter(*tags)
+            if next(el.iterancestors(qn("w:p"))) is p))
     return "\n".join(lines)
 
 
@@ -165,9 +170,12 @@ def docx_textbox_text(path):
     import docx
     from docx.oxml.ns import qn
     d = docx.Document(str(path))
+    tags = [qn(f"w:{t}") for t in ("t", "tab", "br", "cr")]
+    t_tag = qn("w:t")
     boxes = []
     for box in d.element.body.iter(qn("w:txbxContent")):
-        text = " ".join("".join(t.text or "" for t in p.iter(qn("w:t"))) for p in box.iter(qn("w:p")))
+        text = " ".join("".join((el.text or "") if el.tag == t_tag else " " for el in p.iter(*tags))
+                        for p in box.iter(qn("w:p")))
         if text.strip():
             boxes.append(" ".join(text.split()))
     return "\n".join(dict.fromkeys(boxes))  # de-duplicate Word's Choice/Fallback copies

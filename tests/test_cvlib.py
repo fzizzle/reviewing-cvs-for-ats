@@ -1,7 +1,7 @@
 import pytest
 
 import cvlib
-from build_fixtures import build_nurse_docx, build_word_template_docx
+from build_fixtures import W_NS, build_nurse_docx, build_word_template_docx
 
 
 def test_txt_extraction(tmp_path):
@@ -52,6 +52,41 @@ def test_docx_text_boxes_only_in_lenient_parser(tmp_path):
     assert "morgan.blake@example.com" not in texts["python-docx"]
     assert texts["docx-xml"].count("morgan.blake@example.com") == 1
     assert cvlib.docx_textbox_text(path) == "morgan.blake@example.com · +44 20 7946 0456"
+
+
+def build_tabs_and_breaks_docx(out):
+    """A .docx with a tab and a line break gluing words together if w:tab/w:br/w:cr are ignored,
+    in the body and inside a text box."""
+    import docx
+    from docx.oxml import parse_xml
+    d = docx.Document()
+    p = d.add_paragraph()
+    p.add_run("Job Title")
+    p.add_run().add_tab()
+    p.add_run("2020 - 2021")
+    p2 = d.add_paragraph()
+    p2.add_run("Before break")
+    p2.add_run().add_break()
+    p2.add_run("After break")
+    d.add_paragraph()._p.append(parse_xml(
+        f'<w:r xmlns:w="{W_NS}" xmlns:v="urn:schemas-microsoft-com:vml"><w:pict>'
+        '<v:shape style="width:300pt;height:20pt"><v:textbox><w:txbxContent><w:p><w:r>'
+        '<w:t>Left</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>Right</w:t></w:r></w:p>'
+        '</w:txbxContent></v:textbox></v:shape></w:pict></w:r>'))
+    d.save(out)
+    return out
+
+
+def test_docx_xml_text_keeps_tabs_and_breaks_apart(tmp_path):
+    path = build_tabs_and_breaks_docx(tmp_path / "w.docx")
+    text = cvlib.docx_xml_text(path)
+    assert "Job Title\t2020 - 2021" in text
+    assert "Before break\nAfter break" in text
+
+
+def test_docx_textbox_text_keeps_tabs_apart(tmp_path):
+    path = build_tabs_and_breaks_docx(tmp_path / "w.docx")
+    assert cvlib.docx_textbox_text(path) == "Left Right"
 
 
 try:
