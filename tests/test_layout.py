@@ -207,3 +207,12 @@ def test_score_and_layout_report_layout_traps(tmp_path, capsys):
     assert any("side-by-side columns" in line for line in score.problems(score.score_cv(FIX / "two_column_cv.html")))
     assert layout.main([str(FIX / "two_column_cv.html")]) == 1
     assert "side-by-side columns" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("text, dateish", [
+    ("2019 – 2021", True), ("Mar 2021 – Present", True), ("2023 – Aujourd'hui", True), ("seit 2020 – heute", True),
+    ("Current", True), ("Renowned for reliability", False), ("Know-how in CAD", False), ("actually", False),
+    ("concurrent engineering", False), ("12019 units", False),
+])
+def test_dateish_needs_whole_words(text, dateish):
+    assert bool(layout.DATEISH.search(text)) is dateish

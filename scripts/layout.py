@@ -79,7 +79,8 @@ def find_orphans(lines, right_edge, max_words=2, slack=40, gap_factor=1.55):
     return orphans
 
 
-DATEISH = re.compile(r"(?:19|20)\d{2}|present|current|now|aujourd|heute|actual", re.I)
+DATEISH = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)|\b(?:present|current|now|today|aujourd|heute|actualidad|actual)\b",
+                      re.I)
 
 
 def find_gutter(lines, min_run=6, half_width=4, step=2):
