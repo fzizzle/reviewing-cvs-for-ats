@@ -14,6 +14,16 @@ def L(top, x0, x1, text, size=9.0):
 FULL = "• Built contribution pages and pricing feeds for clients in London, Switzerland and"
 
 
+def test_orphan_found_at_loose_line_spacing():
+    # line-height 1.9: a 17.1pt pitch is beyond 1.55 x 9pt, but it is this page's usual spacing
+    lines = [L(100 + 17.1 * i, 50, 540, FULL) for i in range(4)] + [L(100 + 17.1 * 4, 58, 140, "Emerging Markets.")]
+    assert len(layout.find_orphans(lines, right_edge=545)) == 1
+
+
+def test_line_pitch_needs_three_matching_gaps():
+    assert layout.line_pitch([L(100, 50, 540, FULL), L(125, 50, 90, "SKILLS")]) == 0
+
+
 def test_short_wrapped_last_line_is_an_orphan():
     out = layout.find_orphans([L(100, 50, 540, FULL), L(112.5, 58, 140, "Emerging Markets.")], right_edge=545)
     assert len(out) == 1 and "Emerging Markets." in out[0]

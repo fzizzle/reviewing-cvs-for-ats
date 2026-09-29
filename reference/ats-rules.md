@@ -28,7 +28,7 @@ Format: `{"advert": "short label", "keywords": {"label": ["synonym", ...], ...},
 - Don't upload a CV to online ATS checkers unless the person explicitly agrees. It's personal data sent to a third party.
 
 ## Known tool limits
-- `cvats layout` misses orphan lines (a wrapped line holding 1–2 words) when line-height exceeds ~1.55 (its wrap test assumes line gap ≤ 1.55 × font size) — above that, Read the rendered PDF and check by eye.
+- `cvats layout` finds orphan lines (a wrapped line holding 1–2 words) by comparing line gaps with the page's usual line spacing; on a page with fewer than four lines at one spacing it assumes line-height ≤ 1.55. Check very short pages by eye.
 - `cvats repeats` builds 3-word phrases after dropping stopwords, months and bare numbers, across line and section breaks, so a flagged phrase may not be a literal quote — find it in the source before rewriting. `--allow` hides a phrase only when all three of its words are allowed. Its stopword and month lists are English/French only, so in other languages expect phrases padded with words like "und", "der" or "para" — judge those by eye.
 - `cvats score` knows section headings, month names and "present" words in English, French, German and Spanish only, plus numeric dates ("03.2019", "3/2019", ISO "2019-03"). For a CV in another language, read the extracted text instead of trusting the sections/dates sub-scores.
 - `cvats score` credits "location" only for "City, Country" (or US/Canadian "City, ST", e.g. "Austin, TX") in the first five lines. "Manchester" alone or "Leeds, West Yorkshire" isn't credited — suggest "Leeds, UK" only if the person gave you the city.

@@ -66,12 +66,29 @@ def mark_nearest_line(lines, curves, max_dist=6):
             best["marker"] = True
 
 
+def line_pitch(lines):
+    """The page's usual line spacing: the most common gap between line tops (to 0.5pt), or 0 when
+    fewer than 3 gaps share one value."""
+    gaps = collections.Counter(round((cur["top"] - prev["top"]) * 2) / 2 for prev, cur in zip(lines, lines[1:])
+                               if 0 < cur["top"] - prev["top"] < 4 * prev["size"])
+    if not gaps:
+        return 0
+    pitch, count = gaps.most_common(1)[0]
+    return pitch if count >= 3 else 0
+
+
 def find_orphans(lines, right_edge, max_words=2, slack=40, gap_factor=1.55):
-    """Short last lines of wrapped text: the line above ran to the right edge and this one continues it."""
+    """Short last lines of wrapped text: the line above ran to the right edge and this one continues it.
+
+    A wrap is a gap of at most gap_factor x the font size, or 1.1 x the page's usual line pitch
+    when the page sets looser line spacing than that.
+    """
+    pitch = line_pitch(lines)
     orphans = []
     for prev, cur in zip(lines, lines[1:]):
         gap = cur["top"] - prev["top"]
-        wrapped = prev["x1"] >= right_edge - slack and 0 < gap <= prev["size"] * gap_factor
+        wrapped = (prev["x1"] >= right_edge - slack
+                   and 0 < gap <= max(prev["size"] * gap_factor, pitch * 1.1))
         continues = (cur["x0"] >= prev["x0"] - 1 and not cur["text"].startswith(BULLET_GLYPHS)
                      and not cur.get("marker"))
         if wrapped and continues and len(cur["text"].split()) <= max_words:
