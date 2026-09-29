@@ -1,7 +1,7 @@
 import pytest
 
 import cvlib
-from build_fixtures import build_nurse_docx
+from build_fixtures import build_nurse_docx, build_word_template_docx
 
 
 def test_txt_extraction(tmp_path):
@@ -36,6 +36,22 @@ def test_unsupported_format(tmp_path):
     f.write_text("x")
     with pytest.raises(ValueError, match="Unsupported"):
         cvlib.extract_all(f)
+
+
+def test_docx_reads_content_controls(tmp_path):
+    texts, _ = cvlib.extract_all(build_word_template_docx(tmp_path / "w.docx"))
+    assert set(texts) == {"python-docx", "docx-xml"}
+    for name, text in texts.items():
+        assert "BTEC Level 3 Business" in text, name
+        assert text.index("Education") < text.index("BTEC") < text.index("Skills"), name
+
+
+def test_docx_text_boxes_only_in_lenient_parser(tmp_path):
+    path = build_word_template_docx(tmp_path / "w.docx")
+    texts, _ = cvlib.extract_all(path)
+    assert "morgan.blake@example.com" not in texts["python-docx"]
+    assert texts["docx-xml"].count("morgan.blake@example.com") == 1
+    assert cvlib.docx_textbox_text(path) == "morgan.blake@example.com · +44 20 7946 0456"
 
 
 try:

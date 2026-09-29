@@ -27,7 +27,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import MIN_WORDS, NO_TEXT, cli, docx_header_footer_text, extract_all, normalise  # noqa: E402
+from cvlib import MIN_WORDS, NO_TEXT, cli, docx_header_footer_text, docx_textbox_text, extract_all, normalise  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
@@ -321,9 +321,13 @@ def score_cv(path, keywords=None, max_pages=2, required=()):
                           order_consistent=consistent, max_pages=max_pages, required=required) for n, t in texts.items()}
     for n, r in rows.items():
         r["ligatures"] = texts.ligatures.get(n, 0)
-    if str(path).lower().endswith(".docx") and docx_header_footer_text(path):
+    if str(path).lower().endswith(".docx"):
+        hf, boxed = docx_header_footer_text(path), docx_textbox_text(path)
         for r in rows.values():
-            r["header_footer_text"] = docx_header_footer_text(path)
+            if hf:
+                r["header_footer_text"] = hf
+            if boxed:
+                r["textbox_text"] = boxed
     return rows
 
 
@@ -404,6 +408,8 @@ def problems(rows):
     first = next(iter(rows.values()))
     if first.get("header_footer_text"):
         out.append(f"- Word header/footer holds text many ATS skip: {first['header_footer_text']!r}")
+    if first.get("textbox_text"):
+        out.append(f"- Word text boxes hold text many ATS skip: {first['textbox_text']!r}")
     out += keyword_problems(rows)
     return out
 

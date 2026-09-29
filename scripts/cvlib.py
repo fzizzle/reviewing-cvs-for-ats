@@ -120,20 +120,57 @@ PDF_PARSERS = {"pypdf": _pypdf, "pdfminer": _pdfminer, "pdfplumber": _pdfplumber
 
 
 def docx_text(path):
-    """Body text of a .docx in document order (tables stay where they are)."""
+    """Body text of a .docx in document order: paragraphs, table rows (one line per row) and content
+    controls (w:sdt, used by Word's CV templates). Text boxes are left out, as many ATS leave them out."""
     import docx
     from docx.table import Table
     from docx.text.paragraph import Paragraph
     d = docx.Document(str(path))
     parts = []
-    for child in d.element.body.iterchildren():
-        tag = child.tag.rsplit("}", 1)[-1]
-        if tag == "p":
-            parts.append(Paragraph(child, d).text)
-        elif tag == "tbl":
-            for row in Table(child, d).rows:
-                parts.append(" ".join(cell.text for cell in row.cells))
+
+    def walk(parent):
+        for child in parent.iterchildren():
+            tag = child.tag.rsplit("}", 1)[-1]
+            if tag == "p":
+                parts.append(Paragraph(child, d).text)
+            elif tag == "tbl":
+                for row in Table(child, d).rows:
+                    parts.append(" ".join(cell.text for cell in row.cells))
+            elif tag in ("sdt", "sdtContent"):
+                walk(child)
+
+    walk(d.element.body)
     return "\n".join(parts)
+
+
+MC_FALLBACK = "{http://schemas.openxmlformats.org/markup-compatibility/2006}Fallback"
+
+
+def docx_xml_text(path):
+    """Every paragraph's own text in XML order, text boxes included: what a lenient ATS reads."""
+    import docx
+    from docx.oxml.ns import qn
+    d = docx.Document(str(path))
+    lines = []
+    for p in d.element.body.iter(qn("w:p")):
+        if any(a.tag == MC_FALLBACK for a in p.iterancestors()):
+            continue  # Word stores each text box twice; the Fallback copy is the duplicate
+        lines.append("".join(t.text or "" for t in p.iter(qn("w:t"))
+                             if next(t.iterancestors(qn("w:p"))) is p))
+    return "\n".join(lines)
+
+
+def docx_textbox_text(path):
+    """Text inside Word text boxes and shapes. Many ATS skip it, so details there get lost."""
+    import docx
+    from docx.oxml.ns import qn
+    d = docx.Document(str(path))
+    boxes = []
+    for box in d.element.body.iter(qn("w:txbxContent")):
+        text = " ".join("".join(t.text or "" for t in p.iter(qn("w:t"))) for p in box.iter(qn("w:p")))
+        if text.strip():
+            boxes.append(" ".join(text.split()))
+    return "\n".join(dict.fromkeys(boxes))  # de-duplicate Word's Choice/Fallback copies
 
 
 def docx_header_footer_text(path):
@@ -198,5 +235,5 @@ def extract_all(path):
         if pdf is not None:
             return normalise({name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()}), page_count(pdf)
     if ext == ".docx":
-        return normalise({"python-docx": docx_text(path)}), None
+        return normalise({"python-docx": docx_text(path), "docx-xml": docx_xml_text(path)}), None
     return normalise({"text": path.read_text(encoding="utf-8")}), None

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from cvlib import cli, docx_header_footer_text, extract_all  # noqa: E402
+from cvlib import cli, docx_header_footer_text, docx_textbox_text, extract_all  # noqa: E402
 
 
 @cli
@@ -27,6 +27,8 @@ def main(argv=None):
             (Path(a.out) / f"{name}.txt").write_text(text, encoding="utf-8")
     if a.cv.lower().endswith(".docx") and docx_header_footer_text(a.cv):
         print("WARNING: text in the Word header/footer (many ATS skip it):", docx_header_footer_text(a.cv))
+    if a.cv.lower().endswith(".docx") and docx_textbox_text(a.cv):
+        print("WARNING: text in Word text boxes (many ATS skip it):", docx_textbox_text(a.cv))
     if not a.out:
         name, text = next(iter(texts.items()))
         print(f"\n--- {name} ---\n{text}")

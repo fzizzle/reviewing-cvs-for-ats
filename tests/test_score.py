@@ -341,6 +341,14 @@ def test_location_keeps_a_curly_apostrophe():
     assert score.find_location("Sam Taylor\nData Analyst\nL’Aquila, Italy") == "L’Aquila, Italy"
 
 
+def test_score_reports_word_text_boxes(tmp_path):
+    from build_fixtures import build_word_template_docx
+    rows = score.score_cv(build_word_template_docx(tmp_path / "w.docx"))
+    assert "email" in rows["python-docx"]["missing_contact"] and "email" not in rows["docx-xml"]["missing_contact"]
+    assert any(line.startswith("- Word text boxes hold text many ATS skip: 'morgan.blake@example.com")
+               for line in score.problems(rows))
+
+
 def test_unreadable_glyphs_cost_points():
     clean = score.score_text(FULL, 1)
     icons = score.score_text(FULL.replace("jane@example.com", "\uf0e0 jane@example.com \uf095"), 1)
