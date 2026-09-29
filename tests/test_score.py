@@ -253,3 +253,25 @@ def test_keyword_example_loads_and_marks_required():
     path = pathlib.Path(__file__).resolve().parents[1] / "templates" / "keywords-example.json"
     kw, advert, required = score.load_keywords(path)
     assert advert and set(required) <= set(kw) and "team leadership" in required
+
+
+@pytest.mark.parametrize("text, syn", [
+    ("Optimisation of stock levels", "optimization"), ("optimized pricing", "optimise"),
+    ("Analysed sales data", "analyze"), ("carbon fibre layup", "carbon fiber"), ("Colour matching", "color"),
+    ("Expérience client", "experience client"), ("Gestion de la qualité", "qualite"),
+    ("Financial modelling", "modeling"), ("graduate programme", "program"),
+])
+def test_keywords_match_across_accents_and_uk_us_spelling(text, syn):
+    assert score.keyword_hits(text, {"k": [syn]}) == {"k": True}
+
+
+def test_folding_does_not_create_false_matches():
+    assert score.keyword_hits("your hour of flour", {"k": ["yor"]}) == {"k": False}
+
+
+def test_keyword_found_only_in_skills_is_reported():
+    text = "Jane Doe\nEXPERIENCE\nAnalyst\nBuilt dashboards in Tableau\nEDUCATION\nBSc\nSKILLS\nSQL, Tableau"
+    r = score.score_text(text, 1, keywords={"SQL": ["sql"], "Tableau": ["tableau"]})
+    assert r["listed_only_keywords"] == ["SQL"]
+    assert ("- advert keywords only in the header, profile or skills list (add a bullet showing where each "
+            "was used, if the person confirms one): SQL") in score.problems({"a": r})

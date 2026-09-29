@@ -14,7 +14,7 @@ Usage: cvats score CV [--keywords KW.json] [--baseline OLD_CV] [--max-pages N] [
 
 KW.json: {"advert": "short label", "keywords": {"label": ["synonym", ...], ...}, "required": ["label", ...]}
 ("required" is optional; those labels count double in the keyword score and are reported first.)
-Synonyms match case-insensitively, across line breaks. Short synonyms (<= 4 chars) match whole words,
+Synonyms match case-insensitively, across line breaks, ignoring accents and UK/US spelling (optimise/optimize, fibre/fiber, colour/color, modelling/modeling). Short synonyms (<= 4 chars) match whole words,
 plural allowed: "api" matches "APIs", but "ai" does not match "Aim" and "r" does not match "Research".
 Longer synonyms match at the start of a word: "manufactur" matches "manufacturing", "ndt" never
 matches "roundtable". List "leadership" separately from "lead". Never edit KW.json to raise a score.
@@ -60,6 +60,30 @@ ROLE_WORDS = ("manager", "officer", "coordinator", "specialist", "director", "le
               "adviser", "head", "intern")
 ROLE_BLOCKLIST = re.compile(r"\b(?:" + "|".join(ROLE_WORDS) + r")\b", re.I)
 
+FOLDS = [  # UK -> US spelling, applied to the CV text and the synonyms alike
+    (re.compile(r"(?<=\w\w)is(e|ed|es|ing|ation|ations)\b"), r"iz\1"),   # optimise, organisation
+    (re.compile(r"(?<=\w\w)ys(e|ed|es|ing)\b"), r"yz\1"),                # analyse
+    (re.compile(r"(?<=\w\w\w)our(s|ed|ing)?\b"), r"or\1"),               # colour, behaviour (not hour, your)
+    (re.compile(r"(?<=\w\w)([bt])re(s?)\b"), r"\1er\2"),                 # fibre, centre, metre
+    (re.compile(r"(?<=e)ll(ed|ing|er|ers)\b"), r"l\1"),                  # modelling, travelled
+    (re.compile(r"programme(?=s?\b)"), "program"),
+    (re.compile(r"\b(defen|licen|offen)ce"), r"\1se"),
+]
+
+
+def fold(text):
+    """Lowercase, strip accents, map UK to US spelling and collapse whitespace.
+
+    Applied to both sides of a keyword match, so 'Optimisation' finds 'optimization' and
+    'expérience' finds 'experience'.
+    """
+    text = unicodedata.normalize("NFKD", unicodedata.normalize("NFKC", text).lower())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    for pat, rep in FOLDS:
+        text = pat.sub(rep, text)
+    return " ".join(text.split())
+
+
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 PHONE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 LINK = re.compile(r"linkedin\.com/|github\.com/|https?://|www\.", re.I)
@@ -70,15 +94,35 @@ COLS = ["total", "parse", "keywords", "contact", "sections", "order", "dates", "
 
 def _synonym_pattern(syn):
     """Short synonyms (<= 4 chars) match whole words, plural allowed; longer ones match word starts."""
-    syn = " ".join(syn.lower().split())
+    syn = fold(syn)
     esc = re.escape(syn)
     return r"(?<!\w)" + esc + r"s?(?!\w)" if len(syn) <= 4 else r"(?<!\w)" + esc
 
 
 def keyword_hits(text, keywords):
-    low = " ".join(unicodedata.normalize("NFKC", text).lower().split())  # line breaks become spaces
+    low = fold(text)  # line breaks become spaces
     return {label: any(re.search(_synonym_pattern(s), low) for s in syns)
             for label, syns in keywords.items()}
+
+
+LIST_ONLY = {"header", "profile", "skills", "languages", "interests"}  # places that claim, not show
+
+
+def keyword_places(text, keywords):
+    """{label: set of sections where a synonym matches}. Lines before the first heading are 'header'."""
+    blocks, current = {}, "header"
+    for line in text.splitlines():
+        key = heading_key(line)
+        if key:
+            current = key
+            continue
+        blocks.setdefault(current, []).append(line)
+    places = {label: set() for label in keywords}
+    for section, lines in blocks.items():
+        for label, hit in keyword_hits("\n".join(lines), keywords).items():
+            if hit:
+                places[label].add(section)
+    return places
 
 
 def load_keywords(path):
@@ -194,9 +238,12 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
         r["keywords"] = round(35 * sum(weight[k] for k, found in hits.items() if found) / sum(weight.values()), 1)
         r["total"] = round(r["parse"] + r["keywords"], 1)
         r["missing_keywords"] = [k for k, v in hits.items() if not v]
+        places = keyword_places(text, keywords)
+        r["listed_only_keywords"] = [k for k, found in hits.items() if found and places[k] <= LIST_ONLY]
     else:
         r["keywords"] = r["total"] = None
         r["missing_keywords"] = []
+        r["listed_only_keywords"] = []
     r["required"] = [k for k in required if keywords and k in keywords]
     r["missing_required"] = [k for k in r["missing_keywords"] if k in required]
     return r
@@ -259,6 +306,11 @@ def keyword_problems(rows):
         out.append("- advert keywords not found: " + ", ".join(k for k in everywhere if k not in required))
     if partly:
         out.append("- advert keywords some parsers miss (a layout problem, not a gap): " + ", ".join(partly))
+    listed = [k for k in rows[next(iter(rows))]["listed_only_keywords"]
+              if all(k in r["listed_only_keywords"] for r in rows.values())]
+    if listed:
+        out.append("- advert keywords only in the header, profile or skills list (add a bullet showing where each "
+                   "was used, if the person confirms one): " + ", ".join(listed))
     return out
 
 
