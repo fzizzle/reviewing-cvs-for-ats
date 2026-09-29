@@ -307,3 +307,30 @@ def test_season_dates_are_ranges():
 def test_range_with_a_years_only_end_is_not_monthly():
     base = "EXPERIENCE\nEngineer\n{}\nEDUCATION\nBSc\nSKILLS\nPython"
     assert score.score_text(base.format("Jan 2020 – 2022"), 1)["dates"] == 5
+
+
+@pytest.mark.parametrize("line, found", [
+    ("Leeds, UK · sam@example.com", True), ("Austin, TX · sam@example.com", True), ("Paris, France", True),
+    ("Newcastle upon Tyne, United Kingdom", True), ("Saint-Étienne, France", True), ("München, Deutschland", True),
+    ("Marketing Manager · B2B SaaS · Content, Analytics & Team Leadership", False),  # tagline, not a place
+    ("Content, Email & Budget Leadership", False), ("Manchester · sam@example.com", False),
+])
+def test_location_needs_city_and_country(line, found):
+    assert score.contact_checks(f"Sam Taylor\n{line}")["location"] is found
+
+
+def test_find_location_returns_the_place():
+    assert score.find_location("Sam Taylor\nData Analyst\nLeeds, UK · +44 20 7946 0123") == "Leeds, UK"
+
+
+@pytest.mark.parametrize("first, ok", [
+    ("ALEX MORGAN", True), ("Jan van der Berg", True), ("Curriculum Vitae", False), ("RÉSUMÉ", False),
+    ("jane@example.com · +44 20 7946 0123", False), ("Operations Analyst", False),
+])
+def test_first_line_should_be_the_name(first, ok):
+    assert score.score_text(first + "\nEXPERIENCE\nEngineer\nEDUCATION\nBSc\nSKILLS\nPython", 1)["name_line"] is ok
+
+
+def test_name_problem_reported_for_a_full_cv():
+    r = score.score_text("Curriculum Vitae\n" + FULL + "\nWord" * 30, 1)
+    assert any(line.startswith("- first line isn't a name ('Curriculum Vitae')") for line in score.problems({"a": r}))

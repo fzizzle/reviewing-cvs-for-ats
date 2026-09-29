@@ -69,6 +69,38 @@ ROLE_WORDS = ("manager", "officer", "coordinator", "specialist", "director", "le
               "adviser", "head", "intern")
 ROLE_BLOCKLIST = re.compile(r"\b(?:" + "|".join(ROLE_WORDS) + r")\b", re.I)
 
+COUNTRY_NAMES = (
+    "Afghanistan Albania Algeria Andorra Angola Argentina Armenia Australia Austria Azerbaijan Bahrain Bangladesh "
+    "Belarus Belgium Bolivia Bosnia Botswana Brazil Brunei Bulgaria Cambodia Cameroon Canada Chile China Colombia "
+    "Croatia Cuba Cyprus Czechia Denmark Ecuador Egypt England Estonia Ethiopia Finland France Georgia Germany "
+    "Ghana Greece Guatemala Hungary Iceland India Indonesia Iran Iraq Ireland Israel Italy Jamaica Japan Jordan "
+    "Kazakhstan Kenya Kosovo Kuwait Latvia Lebanon Libya Lithuania Luxembourg Malaysia Malta Mauritius Mexico "
+    "Moldova Monaco Mongolia Montenegro Morocco Mozambique Myanmar Namibia Nepal Netherlands Nigeria Norway Oman "
+    "Pakistan Panama Paraguay Peru Philippines Poland Portugal Qatar Romania Russia Rwanda Scotland Senegal Serbia "
+    "Singapore Slovakia Slovenia Spain Sweden Switzerland Syria Taiwan Tanzania Thailand Tunisia Turkey Türkiye "
+    "Uganda Ukraine Uruguay Uzbekistan Venezuela Vietnam Wales Yemen Zambia Zimbabwe "
+    # French, German and Spanish names that differ from the English ones
+    "Algérie Allemagne Angleterre Autriche Belgique Brésil Chine Chypre Croatie Danemark Écosse Égypte Espagne "
+    "Grèce Hongrie Inde Irlande Italie Japon Liban Malaisie Maroc Mexique Norvège Pologne Roumanie Russie Suède "
+    "Suisse Tunisie Turquie Deutschland Österreich Schweiz Frankreich Spanien Italien Niederlande Belgien Polen "
+    "Schweden Dänemark España Francia Alemania Italia Suiza México Brasil Perú"
+).split() + [
+    "United Kingdom", "United States", "United States of America", "United Arab Emirates", "New Zealand",
+    "South Africa", "South Korea", "Saudi Arabia", "Hong Kong", "Sri Lanka", "Costa Rica", "Czech Republic",
+    "Dominican Republic", "Northern Ireland", "Ivory Coast", "Côte d'Ivoire", "North Macedonia", "Royaume-Uni",
+    "États-Unis", "Pays-Bas", "Nouvelle-Zélande", "Émirats arabes unis", "Afrique du Sud", "Arabie saoudite",
+    "Vereinigtes Königreich", "Vereinigte Staaten", "Reino Unido", "Estados Unidos", "Países Bajos",
+]
+REGION_CODES = ("UK GB US USA UAE "  # plus US states and Canadian provinces, as in "Austin, TX"
+                "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM "
+                "NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC AB BC MB NB NL NS ON PE QC SK").split()
+_PLACES = "|".join(sorted(map(re.escape, COUNTRY_NAMES), key=len, reverse=True))
+LOCATION = re.compile(r"(?<!\w)[A-ZÀ-Ý][\w''.-]*(?:[ -][\w''.-]+){0,3},\s*"
+                      rf"(?:(?i:{_PLACES})|{'|'.join(REGION_CODES)})(?![\w-])")
+PARTICLES = {"van", "der", "den", "de", "del", "della", "von", "da", "di", "du", "la", "le", "bin", "binti",
+             "al", "el", "ben", "dos", "das", "y"}
+NOT_A_NAME = re.compile(r"\b(?:cv|curriculum|vitae|r[ée]sum[ée]|lebenslauf|profile|contact)\b", re.I)
+
 FOLDS = [  # UK -> US spelling, applied to the CV text and the synonyms alike
     (re.compile(r"(?<=\w\w)is(e|ed|es|ing|ation|ations)\b"), r"iz\1"),   # optimise, organisation
     (re.compile(r"(?<=\w\w)ys(e|ed|es|ing)\b"), r"yz\1"),                # analyse
@@ -96,7 +128,6 @@ def fold(text):
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 PHONE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 LINK = re.compile(r"linkedin\.com/|github\.com/|https?://|www\.", re.I)
-LOCATION = re.compile(r"(?<!\w)[A-ZÀ-Ý][a-zà-ÿ]+(?:[ -][A-ZÀ-Ý][a-zà-ÿ]+)*,\s*[A-ZÀ-Ý][A-Za-zà-ÿ]+")
 CONTACT_WEIGHTS = {"email": 5, "phone": 3, "international_phone": 2, "link": 2.5, "location": 2.5}
 COLS = ["total", "parse", "keywords", "contact", "sections", "order", "dates", "placement", "length", "penalty", "words"]
 
@@ -212,12 +243,27 @@ def _phones(text):
     return [m.group() for m in PHONE.finditer(text) if len(re.sub(r"\D", "", m.group())) >= 9]
 
 
+def find_location(text):
+    """'City, Country' (or US/Canadian 'City, ST') in the first five non-empty lines, else None."""
+    head = "\n".join([line for line in text.splitlines() if line.strip()][:5])
+    m = LOCATION.search(head)
+    return m.group(0) if m else None
+
+
+def first_line_is_name(text):
+    """Whether the first non-empty line looks like a person's name: ATS take it as the candidate's name."""
+    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    words = first.split()
+    return (1 <= len(words) <= 5 and not re.search(r"[\d@/|·•,:()]", first) and not NOT_A_NAME.search(first)
+            and not ROLE_BLOCKLIST.search(first)
+            and all(w[0].isupper() or w.lower() in PARTICLES for w in words))
+
+
 def contact_checks(text):
-    head = "\n".join([line for line in text.splitlines() if line.strip()][:5])  # contact block only
     phones = _phones(text)
     return {"email": bool(EMAIL.search(text)), "phone": bool(phones),
             "international_phone": any(p.startswith("+") for p in phones), "link": bool(LINK.search(text)),
-            "location": bool(LOCATION.search(head))}
+            "location": find_location(text) is not None}
 
 
 def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent=True, max_pages=2, required=()):
@@ -242,6 +288,8 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
         "words": words, "pages": pages, "garbled": garbled, "sequence": seq,
         "missing_sections": missing_sections, "misplaced_dates": misplaced,
         "missing_contact": [k for k, v in contact.items() if not v],
+        "name_line": first_line_is_name(text),
+        "first_line": next((line.strip() for line in text.splitlines() if line.strip()), ""),
     }
     r["parse"] = round(max(0.0, r["contact"] + r["sections"] + r["order"] + r["dates"]
                            + r["placement"] + r["length"] - r["penalty"]), 1)
@@ -294,6 +342,8 @@ def row_messages(r):
         yield f"dates landed under the wrong section: {r['misplaced_dates']}"
     if r["missing_contact"]:
         yield f"contact items not found: {', '.join(r['missing_contact'])}"
+    if not r["name_line"] and r["words"] >= MIN_WORDS:
+        yield f"first line isn't a name ({r['first_line'][:40]!r}): ATS read the first line as the candidate's name"
     if r.get("ligatures"):
         yield (f"extracted {r['ligatures']} ligature glyph(s) (e.g. one glyph for 'fi'); "
                "add font-variant-ligatures: none")
