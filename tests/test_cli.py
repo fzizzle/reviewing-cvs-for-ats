@@ -2,6 +2,7 @@
 import pytest
 
 import extract
+import fidelity
 import layout
 import render
 import repeats
@@ -50,3 +51,10 @@ def test_repeats_refuses_near_empty_text(tmp_path, capsys):
 def test_score_problems_lead_with_empty_text():
     rows = {"a": score.score_text("", 1), "b": score.score_text("", 1)}
     assert "no extractable text (scanned image?)" in score.problems(rows)[0]
+
+
+def test_fidelity_rejects_unsupported_format_cleanly(tmp_path, capsys):
+    f = tmp_path / "cv.odt"
+    f.write_text("x", encoding="utf-8")
+    assert fidelity.main([str(f), str(f)]) == 2
+    assert capsys.readouterr().err.startswith("cvats: error: Unsupported CV format")
