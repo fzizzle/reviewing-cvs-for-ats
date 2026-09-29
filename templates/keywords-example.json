@@ -14,5 +14,6 @@
     "team leadership": ["led a team", "managed a team", "line manag", "direct reports"],
     "content strategy": ["content strategy"],
     "SEO": ["seo"]
-  }
+  },
+  "required": ["B2B marketing", "team leadership", "budget ownership"]
 }

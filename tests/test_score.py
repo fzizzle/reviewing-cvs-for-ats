@@ -1,3 +1,6 @@
+import json
+import pytest
+
 import score
 
 
@@ -211,3 +214,42 @@ def test_section_order_disagreement_is_one_line(monkeypatch):
     lines = [line for line in score.problems(score.score_cv("dummy.txt")) if "disagree" in line]
     assert lines == ["- parsers disagree on section order: a, c ['experience', 'education', 'skills']; "
                      "b ['education', 'experience', 'skills']"]
+
+
+def _kw_file(tmp_path, data):
+    p = tmp_path / "kw.json"
+    p.write_text(data if isinstance(data, str) else json.dumps(data), encoding="utf-8")
+    return p
+
+
+@pytest.mark.parametrize("data, needle", [
+    ({"advert": "x", "kw": {"SQL": ["sql"]}}, '"keywords"'),
+    ({"keywords": {}}, '"keywords"'),
+    ("[1, 2]", '"keywords"'),
+    ({"keywords": {"SQL": "sql"}}, 'keyword "SQL" needs a list'),
+    ({"keywords": {"SQL": []}}, 'keyword "SQL" needs a list'),
+    ({"keywords": {"SQL": ["sql"]}, "required": ["Python"]}, "unknown: ['Python']"),
+])
+def test_bad_keyword_files_are_clean_errors(tmp_path, capsys, data, needle):
+    cv = tmp_path / "cv.txt"
+    cv.write_text("EXPERIENCE\nAnalyst using sql\n", encoding="utf-8")
+    assert score.main([str(cv), "--keywords", str(_kw_file(tmp_path, data))]) == 2
+    err = capsys.readouterr().err
+    assert err.startswith("cvats: error:") and needle in err
+
+
+def test_required_keywords_count_double_and_are_listed_first():
+    text = "EXPERIENCE\nUsed HubSpot\nEDUCATION\nBA\nSKILLS\nSEO"
+    kw = {"HubSpot": ["hubspot"], "SQL": ["sql"], "GA4": ["ga4"]}
+    r = score.score_text(text, 1, keywords=kw, required=("SQL",))
+    assert r["keywords"] == round(35 * 1 / 4, 1)  # HubSpot found; weights HubSpot 1 + SQL 2 + GA4 1
+    assert r["missing_required"] == ["SQL"]
+    lines = score.problems({"a": r})
+    assert lines.index("- required advert keywords not found: SQL") < lines.index("- advert keywords not found: GA4")
+
+
+def test_keyword_example_loads_and_marks_required():
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[1] / "templates" / "keywords-example.json"
+    kw, advert, required = score.load_keywords(path)
+    assert advert and set(required) <= set(kw) and "team leadership" in required

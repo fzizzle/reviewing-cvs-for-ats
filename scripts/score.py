@@ -12,7 +12,8 @@ This is a heuristic simulation, NOT a commercial ATS score. Always report it as 
 
 Usage: cvats score CV [--keywords KW.json] [--baseline OLD_CV] [--max-pages N] [--json]
 
-KW.json: {"advert": "short label", "keywords": {"label": ["synonym", ...], ...}}
+KW.json: {"advert": "short label", "keywords": {"label": ["synonym", ...], ...}, "required": ["label", ...]}
+("required" is optional; those labels count double in the keyword score and are reported first.)
 Synonyms match case-insensitively, across line breaks. Short synonyms (<= 4 chars) match whole words,
 plural allowed: "api" matches "APIs", but "ai" does not match "Aim" and "r" does not match "Research".
 Longer synonyms match at the start of a word: "manufactur" matches "manufacturing", "ndt" never
@@ -80,6 +81,29 @@ def keyword_hits(text, keywords):
             for label, syns in keywords.items()}
 
 
+def load_keywords(path):
+    """Read and check a keyword file. Returns (keywords, advert, required).
+
+    Format: {"advert": "label", "keywords": {"label": ["synonym", ...]}, "required": ["label", ...]}.
+    "required" is optional: required labels count double and are reported first.
+    """
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except json.JSONDecodeError as err:
+        raise ValueError(f"{path}: not valid JSON ({err})") from None
+    kw = data.get("keywords") if isinstance(data, dict) else None
+    if not isinstance(kw, dict) or not kw:
+        raise ValueError(f'{path}: needs a non-empty "keywords" object: {{"label": ["synonym", ...]}}')
+    for label, syns in kw.items():
+        if not isinstance(syns, list) or not syns or not all(isinstance(s, str) and s.strip() for s in syns):
+            raise ValueError(f'{path}: keyword "{label}" needs a list of synonym strings, e.g. ["{label.lower()}"]')
+    required = data.get("required", [])
+    if not isinstance(required, list) or any(r not in kw for r in required):
+        unknown = [r for r in required if r not in kw] if isinstance(required, list) else required
+        raise ValueError(f'{path}: "required" must list keyword labels; unknown: {unknown}')
+    return kw, data.get("advert"), tuple(required)
+
+
 def heading_key(line):
     """Section key for a heading line, 'other' for an unknown ALL-CAPS heading, else None.
 
@@ -141,7 +165,7 @@ def contact_checks(text):
             "location": bool(LOCATION.search(head))}
 
 
-def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent=True, max_pages=2):
+def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent=True, max_pages=2, required=()):
     contact = contact_checks(text)
     seq = section_sequence(text)
     missing_sections = [k for k in REQUIRED if k not in seq]
@@ -166,22 +190,25 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
                            + r["placement"] + r["length"] - r["penalty"]), 1)
     if keywords:
         hits = keyword_hits(text, keywords)
-        r["keywords"] = round(35 * sum(hits.values()) / len(hits), 1)
+        weight = {k: 2 if k in required else 1 for k in hits}
+        r["keywords"] = round(35 * sum(weight[k] for k, found in hits.items() if found) / sum(weight.values()), 1)
         r["total"] = round(r["parse"] + r["keywords"], 1)
         r["missing_keywords"] = [k for k, v in hits.items() if not v]
     else:
         r["keywords"] = r["total"] = None
         r["missing_keywords"] = []
+    r["required"] = [k for k in required if keywords and k in keywords]
+    r["missing_required"] = [k for k in r["missing_keywords"] if k in required]
     return r
 
 
-def score_cv(path, keywords=None, max_pages=2):
+def score_cv(path, keywords=None, max_pages=2, required=()):
     texts, pages = extract_all(path)
     texts = normalise(texts)  # idempotent; keeps extract_all's ligature counts
     expected = max(len(RANGE.findall(t)) for t in texts.values()) or 1
     consistent = len({tuple(section_sequence(t)) for t in texts.values()}) == 1
     rows = {n: score_text(t, pages, keywords=keywords, expected_dates=expected,
-                          order_consistent=consistent, max_pages=max_pages) for n, t in texts.items()}
+                          order_consistent=consistent, max_pages=max_pages, required=required) for n, t in texts.items()}
     for n, r in rows.items():
         r["ligatures"] = texts.ligatures.get(n, 0)
     if str(path).lower().endswith(".docx") and docx_header_footer_text(path):
@@ -225,8 +252,11 @@ def keyword_problems(rows):
     everywhere = [k for k, names in missed.items() if len(names) == len(rows)]
     partly = [f"{k} ({', '.join(names)})" for k, names in missed.items() if len(names) < len(rows)]
     out = []
-    if everywhere:
-        out.append("- advert keywords not found: " + ", ".join(everywhere))
+    required = set(next(iter(rows.values())).get("required", []))
+    if [k for k in everywhere if k in required]:
+        out.append("- required advert keywords not found: " + ", ".join(k for k in everywhere if k in required))
+    if [k for k in everywhere if k not in required]:
+        out.append("- advert keywords not found: " + ", ".join(k for k in everywhere if k not in required))
     if partly:
         out.append("- advert keywords some parsers miss (a layout problem, not a gap): " + ", ".join(partly))
     return out
@@ -267,13 +297,12 @@ def main(argv=None):
     ap.add_argument("--max-pages", type=int, default=2)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
-    keywords, advert = None, None
+    keywords, advert, required = None, None, ()
     if a.keywords:
-        data = json.loads(Path(a.keywords).read_text(encoding="utf-8"))
-        keywords, advert = data["keywords"], data.get("advert")
-    report = {"cv": score_cv(a.cv, keywords, a.max_pages)}
+        keywords, advert, required = load_keywords(a.keywords)
+    report = {"cv": score_cv(a.cv, keywords, a.max_pages, required)}
     if a.baseline:
-        report["baseline"] = score_cv(a.baseline, keywords, a.max_pages)
+        report["baseline"] = score_cv(a.baseline, keywords, a.max_pages, required)
     if a.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
         return 0
