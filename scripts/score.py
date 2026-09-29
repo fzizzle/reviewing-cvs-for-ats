@@ -5,7 +5,7 @@ Extracts the CV with several parsers (pypdf, pdfminer, pdfplumber, pymupdf for P
 python-docx for .docx; raw text for .txt/.md) and scores each extraction:
 
   parse quality /65  contact 15, sections 15, section order 10, dates 10, date placement 10,
-                     length 5, minus up to 15 for letter-spaced (garbled) text
+                     length 5, minus up to 15 for letter-spaced (garbled) text and unreadable glyphs
   keywords      /35  share of advert keywords found (only with --keywords)
 
 This is a heuristic simulation, NOT a commercial ATS score. Always report it as such.
@@ -62,6 +62,7 @@ SECTIONS = {  # checked in this order; first match wins
 REQUIRED = ("experience", "education", "skills")
 NON_DATED = {"skills", "languages", "interests"}
 GARBLED = re.compile(r"(?<!\w)(?:[A-ZÀ-Ý] ){3,}[A-ZÀ-Ý](?!\w)")
+UNREADABLE = re.compile(r"\(cid:\d+\)|[\ue000-\uf8ff\ufffd]")  # unmapped font glyphs, icon-font symbols
 
 ROLE_WORDS = ("manager", "officer", "coordinator", "specialist", "director", "lead", "executive",
               "consultant", "analyst", "supervisor", "administrator", "associate", "assistant",
@@ -275,8 +276,9 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
     monthly = [m for m in matches  # both ends month-precise (or "Present")
                if not YEAR_ONLY.fullmatch(m.group(1).strip()) and not YEAR_ONLY.fullmatch(m.group(2).strip())]
     ok, misplaced = date_placement(text)
-    words = len(re.findall(r"\w+", text))
+    words = len(re.findall(r"\w+", UNREADABLE.sub(" ", text)))
     garbled = GARBLED.findall(text)
+    unreadable = len(UNREADABLE.findall(text))
     r = {
         "contact": sum(CONTACT_WEIGHTS[k] for k, v in contact.items() if v),
         "sections": round(15 * (len(REQUIRED) - len(missing_sections)) / len(REQUIRED), 1),
@@ -284,8 +286,8 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
         "dates": round(5 * min(1, len(ranges) / max(expected_dates, 1)) + 5 * len(monthly) / len(ranges), 1) if ranges else 0,
         "placement": round(10 * ok / (ok + len(misplaced)), 1) if ok + len(misplaced) else 0,
         "length": (2.5 if pages is None or pages <= max_pages else 0) + (2.5 if 300 <= words <= 900 else 0),
-        "penalty": min(3 * len(garbled), 15),
-        "words": words, "pages": pages, "garbled": garbled, "sequence": seq,
+        "penalty": min(3 * len(garbled) + min(unreadable, 10), 15),
+        "words": words, "pages": pages, "garbled": garbled, "unreadable": unreadable, "sequence": seq,
         "missing_sections": missing_sections, "misplaced_dates": misplaced,
         "missing_contact": [k for k, v in contact.items() if not v],
         "name_line": first_line_is_name(text),
@@ -338,6 +340,9 @@ def row_messages(r):
         yield f"section headings not recognised: {', '.join(r['missing_sections'])}"
     if r["garbled"]:
         yield f"letter-spaced text read as separate letters: {r['garbled'][:3]}"
+    if r.get("unreadable"):
+        yield (f"{r['unreadable']} unreadable glyph{'s' if r['unreadable'] != 1 else ''} (icon-font symbols, or a font with no text map): "
+               "use words ('Email:', 'Phone:') instead of icons and standard fonts")
     if r["misplaced_dates"]:
         yield f"dates landed under the wrong section: {r['misplaced_dates']}"
     if r["missing_contact"]:

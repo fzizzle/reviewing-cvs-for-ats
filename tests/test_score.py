@@ -339,3 +339,12 @@ def test_name_problem_reported_for_a_full_cv():
 def test_location_keeps_a_curly_apostrophe():
     # Curly apostrophe U+2019, as in French names like L'Aquila
     assert score.find_location("Sam Taylor\nData Analyst\nL’Aquila, Italy") == "L’Aquila, Italy"
+
+
+def test_unreadable_glyphs_cost_points():
+    clean = score.score_text(FULL, 1)
+    icons = score.score_text(FULL.replace("jane@example.com", "\uf0e0 jane@example.com \uf095"), 1)
+    cid = score.score_text("(cid:3)(cid:4)(cid:5) " * 6 + FULL, 1)
+    assert icons["unreadable"] == 2 and icons["penalty"] == clean["penalty"] + 2
+    assert cid["unreadable"] == 18 and cid["penalty"] == 10 and cid["words"] == clean["words"]
+    assert any("unreadable glyphs" in line for line in score.problems({"a": icons}))
