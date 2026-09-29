@@ -34,21 +34,30 @@ MONTH = (r"(?:january|february|march|april|may|june|july|august|september|octobe
          r"décembre|decembre|januar|märz|juni|juli|oktober|dezember|"  # German (others match EN/FR)
          r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|"
          r"jan|feb|fév|fev|mar|mär|apr|avr|jun|jul|juil|aug|sep|sept|oct|okt|nov|dec|déc|dez|ene|abr|ago|dic)\.?")
-DATE = (rf"(?:{MONTH}\s+\d{{4}}|(?:19|20)\d{{2}}-(?:0[1-9]|1[0-2])(?!\d)|\d{{1,2}}[./]\d{{4}}"
-        rf"|(?:19|20)\d{{2}})")  # "Mar 2020", ISO "2020-03", "03.2020" or "3/2020", "2020"
+SEASON = (r"(?:spring|summer|autumn|fall|winter|printemps|été|ete|automne|hiver|frühling|sommer|herbst"
+          r"|primavera|verano|otoño|invierno)")
+DATE = (rf"(?:{MONTH}\s+\d{{4}}|{SEASON}\s+\d{{4}}|(?:19|20)\d{{2}}-(?:0[1-9]|1[0-2])(?!\d)|\d{{1,2}}[./]\d{{4}}"
+        rf"|(?:19|20)\d{{2}})")  # "Mar 2020", "Summer 2020", ISO "2020-03", "03.2020" or "3/2020", "2020"
 PRESENT = r"present|current|now|today|aujourd'hui|présent|en\s+cours|heute|aktuell|actualidad|presente"
 RANGE = re.compile(rf"(?<!\w)({DATE})\s*(?:–|—|-|to|à)\s*({DATE}|{PRESENT})(?!\w)", re.I)
 YEAR_ONLY = re.compile(r"(?:19|20)\d{2}")
 
 SECTIONS = {  # checked in this order; first match wins
-    "profile": r"\b(profile|summary|about me|profil|objective)\b",
-    "education": r"\b(education|qualifications|formations?|formación|diplômes|ausbildung|educación)\b",
-    "experience": (r"\b(experiences?|employment|work history|career history|expériences?|berufserfahrung"
-                   r"|experiencias?)\b"),
+    "profile": r"\b(profile|summary|about me|profil|perfil|objective|personal statement)\b",
+    "education": (r"\b(education|qualifications|formations?|formación|diplômes|ausbildung|educación"
+                  r"|academic background|études)\b"),
+    "experience": (r"\b(experiences?|employment|work history|career history|professional background"
+                   r"|internships?|stages|expériences?|berufserfahrung|praktika|experiencias?)\b"),
     "projects": r"\b(projects?|projets?)\b",
-    "skills": r"\b(skills|compétences?|competences?|kenntnisse|habilidades)\b",
+    "skills": (r"\b(skills|competencies|compétences?|competences?|competencias|expertise|kenntnisse|fähigkeiten"
+               r"|habilidades|tools|technologies)\b"),
     "languages": r"\b(languages|langues?|sprachen|idiomas)\b",
     "interests": r"\b(interests|hobbies|loisirs|centres d'intérêt)\b",
+    "certifications": r"\b(certifications?|certificates|licen[cs]es|zertifikate|certificaciones)\b",
+    "awards": r"\b(awards|achievements|prix|distinctions)\b",
+    "publications": r"\b(publications)\b",
+    "volunteering": r"\b(volunteering|volunteer work|bénévolat|ehrenamt|voluntariado)\b",
+    "activities": r"\b(activities|extracurriculars?|leadership|activités)\b",
 }
 REQUIRED = ("experience", "education", "skills")
 NON_DATED = {"skills", "languages", "interests"}
@@ -155,6 +164,8 @@ def heading_key(line):
     fragment of the line above, not a Skills heading.
     """
     s = line.strip()
+    if s.endswith(":"):
+        s = s[:-1].rstrip()  # "Skills:" is a heading; "Skills: Python, SQL" (colon inside) is a label line
     words = s.split()
     if not 1 <= len(words) <= 6 or ":" in s or s.endswith((".", ",", ";")):
         return None
@@ -213,8 +224,10 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
     contact = contact_checks(text)
     seq = section_sequence(text)
     missing_sections = [k for k in REQUIRED if k not in seq]
-    ranges = [m.group(1) for m in RANGE.finditer(text)]
-    monthly = [r for r in ranges if not YEAR_ONLY.fullmatch(r.strip())]
+    matches = list(RANGE.finditer(text))
+    ranges = [m.group(1) for m in matches]
+    monthly = [m for m in matches  # both ends month-precise (or "Present")
+               if not YEAR_ONLY.fullmatch(m.group(1).strip()) and not YEAR_ONLY.fullmatch(m.group(2).strip())]
     ok, misplaced = date_placement(text)
     words = len(re.findall(r"\w+", text))
     garbled = GARBLED.findall(text)

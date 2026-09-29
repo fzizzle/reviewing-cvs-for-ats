@@ -275,3 +275,35 @@ def test_keyword_found_only_in_skills_is_reported():
     assert r["listed_only_keywords"] == ["SQL"]
     assert ("- advert keywords only in the header, profile or skills list (add a bullet showing where each "
             "was used, if the person confirms one): SQL") in score.problems({"a": r})
+
+
+@pytest.mark.parametrize("line, key", [
+    ("Skills:", "skills"), ("EXPERIENCE:", "experience"), ("CORE COMPETENCIES", "skills"),
+    ("Core Competencies", "skills"), ("Internships", "experience"), ("STAGES", "experience"),
+    ("Personal Statement", "profile"), ("Certifications", "certifications"),
+    ("ACADEMIC ACHIEVEMENTS", "awards"), ("Volunteering", "volunteering"), ("Publications", "publications"),
+    ("Extracurricular Activities", "activities"), ("Academic Background", "education"),
+])
+def test_more_heading_names(line, key):
+    assert score.heading_key(line) == key
+
+
+def test_colon_inside_a_line_is_still_not_a_heading():
+    assert score.heading_key("Skills: Python, SQL") is None
+
+
+def test_dates_under_certifications_are_not_misplaced():
+    ok, bad = score.date_placement("SKILLS\nPython\nCertifications\nPRINCE2 Practitioner, Mar 2021 – Mar 2026")
+    assert ok == 1 and bad == []
+
+
+def test_season_dates_are_ranges():
+    for text in ("Summer 2021 – Autumn 2021", "été 2022 – hiver 2023", "Fall 2019 – Present"):
+        assert score.RANGE.fullmatch(text), text
+    base = "EXPERIENCE\nIntern\n{}\nEDUCATION\nBSc\nSKILLS\nPython"
+    assert score.score_text(base.format("Summer 2021 – Sep 2021"), 1)["dates"] == 10
+
+
+def test_range_with_a_years_only_end_is_not_monthly():
+    base = "EXPERIENCE\nEngineer\n{}\nEDUCATION\nBSc\nSKILLS\nPython"
+    assert score.score_text(base.format("Jan 2020 – 2022"), 1)["dates"] == 5
