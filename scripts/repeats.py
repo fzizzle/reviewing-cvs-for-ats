@@ -7,7 +7,7 @@ Bullets: <li> in .html; in .docx, paragraphs (tables included) with a List style
 typed •/-/* glyph; lines starting with •, -, *, ▪ (or a drawn <li> marker) in .pdf/.txt/.md.
 Exit code 1 when anything repeats.
 
-Usage: cvats repeats CV [--terms "Acme,Oxford,SAMPE"] [--allow "python,sql"]
+Usage: cvats repeats CV [--terms "Acme,Oxford,SAMPE"] [--allow "python, sql, Power BI"]
 """
 import argparse
 import collections
@@ -22,9 +22,17 @@ from cvlib import MIN_WORDS, NO_TEXT, PDF_PARSERS, cli, docx_text  # noqa: E402
 MONTHS = ("jan feb mar apr may jun jul aug sep sept oct nov dec january february march april june july "
           "august september october november december present current janv févr fevr mars avr mai juin "
           "juil août aout déc janvier février avril juillet septembre octobre novembre décembre")
+# French articles, prepositions, pronouns and auxiliaries. Left out because they are also CV content:
+# "ai" (AI), "ma" (MA), "tu" (TU Berlin), "car", "son".
+FRENCH_STOP = ("le la les un une des du de au aux et ou à en dans par pour sur avec sans sous chez entre vers "
+               "selon dont où qui que quoi ce cet cette ces se sa ses leur leurs mon mes ton ta tes notre "
+               "nos votre vos je il elle nous vous ils elles on lui eux ne pas plus très tout tous toute "
+               "toutes avons avez ont avait avaient été être est sont était étaient sera fait afin lors "
+               "ainsi aussi mais donc puis y")
 STOP = set(("a an the and or of to in on at by for with from as into across via per is are was were be been "
             "it its this that these those their his her our your my i we you he she they plus while than then "
-            "also over under up out " + MONTHS).split())
+            "also over under up out " + FRENCH_STOP + " " + MONTHS).split())
+ELISION = re.compile(r"^(?:l|d|j|m|n|s|t|c|qu|jusqu|lorsqu|puisqu)['’]")  # l'équipe -> équipe
 BULLET = re.compile(r"^\s*[•▪‣◦*\-–]\s+")
 LABEL = re.compile(r"^\s*([^:]{1,60}):\s+(.*)$")
 WORD = re.compile(r"[^\W_][\w+#'’-]*")  # any script's letters or digits, then c++/c#/o'neill/e-mail
@@ -117,10 +125,16 @@ def repeated_openers(bullets):
     return {w: c for w, c in counts.items() if w and c > 1}
 
 
+def _words(text):
+    return [w for w in (ELISION.sub("", w) for w in WORD.findall(text.lower())) if w and w not in STOP and not w.isdigit()]
+
+
 def repeated_phrases(text, n=3, allow=()):
-    words = [w for w in WORD.findall(text.lower()) if w not in STOP and not w.isdigit()]
+    """Sorted n-word phrases used more than once. A phrase is allowed when every one of its words
+    belongs to an allow item; items may be phrases ("Power BI") and are stripped and lowercased."""
+    words = _words(text)
     grams = collections.Counter(zip(*(words[i:] for i in range(n))))
-    allowed = {a.lower() for a in allow}
+    allowed = {w for item in allow for w in WORD.findall(item.strip().lower())}
     return sorted(" ".join(g) for g, c in grams.items() if c > 1 and not set(g) <= allowed)
 
 
@@ -133,7 +147,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("cv")
     ap.add_argument("--terms", default="", help="comma-separated names that should appear once")
-    ap.add_argument("--allow", default="", help="comma-separated words allowed to repeat (e.g. skills)")
+    ap.add_argument("--allow", default="", help='comma-separated words or phrases allowed to repeat (e.g. "SQL, Power BI")')
     a = ap.parse_args(argv)
     bullets, text = load(a.cv)
     if len(re.findall(r"\w+", text)) < MIN_WORDS:
@@ -142,7 +156,7 @@ def main(argv=None):
         hint = " — run repeats on the source .html/.docx to check bullet openers" if a.cv.lower().endswith(".pdf") else ""
         print(f"warning: no bullets detected, so bullet openers were not checked{hint}")
     openers = repeated_openers(bullets)
-    phrases = repeated_phrases(text, allow=[w for w in a.allow.split(",") if w])
+    phrases = repeated_phrases(text, allow=[w.strip() for w in a.allow.split(",") if w.strip()])
     terms = {t: c for t, c in term_counts(text, [t.strip() for t in a.terms.split(",") if t.strip()]).items() if c > 1}
     print(f"bullets checked: {len(bullets)}")
     print("repeated bullet openers:", openers or "none")

@@ -67,12 +67,38 @@ def test_detector_accepts_fictional_ranges_and_dates():
     assert phone_problems(text) == [] and email_problems(text) == []
 
 
+def file_text(path):
+    """Text of a tracked file; PDFs and Word files are extracted (body, header/footer, text boxes)
+    so their contact details are checked too. None for other binary files."""
+    import cvlib
+    if path.suffix.lower() == ".pdf":
+        return "\n".join(cvlib.PDF_PARSERS["pymupdf"](str(path)).splitlines())
+    if path.suffix.lower() == ".docx":
+        return "\n".join([cvlib.docx_text(path), cvlib.docx_header_footer_text(path) or "",
+                          cvlib.docx_textbox_text(path) or ""])
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def test_binary_cvs_are_extracted_and_scanned():
+    # The .pdf/.docx fixtures are generated (gitignored), but a binary CV committed later must be
+    # scanned, not skipped as undecodable: check the extraction path on the generated ones.
+    fixtures = [p for p in (ROOT / "tests" / "fixtures").iterdir() if p.suffix.lower() in (".pdf", ".docx")]
+    if not fixtures:
+        pytest.skip("binary fixtures not built")
+    for path in fixtures:
+        text = file_text(path)
+        assert text and text.strip(), path
+        assert phone_problems(text) == [] and email_problems(text) == [], path
+
+
 def test_tracked_files_hold_only_fictional_contacts():
     found = []
     for path in tracked_files():
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
+        text = file_text(path)
+        if text is None:
             continue
         rel = path.relative_to(ROOT)
         found += [f"{rel}: phone {p!r}" for p in phone_problems(text)]
