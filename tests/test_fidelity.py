@@ -201,3 +201,19 @@ def test_german_month_spellings_are_month_dates():
     import fidelity
     for word in ("März", "Maerz", "Jänner", "Februar", "févr.", "Dez."):
         assert fidelity._month(word) is not None, word
+
+
+def test_job_titles_are_not_supporting_verbs():
+    import fidelity
+    orig = ["Sales Assistant, Hollins Department Store, York 2015 – 2018",
+            "IT Support Analyst, Northwind Media, Leeds 2018 – 2021",
+            "Helped with visual merchandising and seasonal window displays."]
+    new = ["Sales Assistant", "Hollins Department Store · York · 2015 – 2018",
+           "IT Support Analyst", "Northwind Media · Leeds · 2018 – 2021",
+           "Contributed to visual merchandising and seasonal window displays."]
+    assert fidelity.supporting_upgrades(orig, new) == []
+    # The real upgrade is still caught, in English and French.
+    assert fidelity.supporting_upgrades(["Helped with visual merchandising and window displays."],
+                                        ["Led visual merchandising and window displays."])
+    assert fidelity.supporting_upgrades(["Aidé à la mise en place d'un plan d'essais de traction."],
+                                        ["Mis en place un plan d'essais de traction."])

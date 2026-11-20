@@ -28,7 +28,13 @@ from score import (DATE, EMAIL, MONTH, PHONE, contact_checks, find_location, fol
                    keyword_hits, load_keywords)
 
 CONTACT_ITEMS = ("email", "phone", "international_phone", "link", "location")
-SUPPORTING = re.compile(r"(?<!\w)(?:help|assist|support|contribu|particip|collabor|aid)\w*", re.I)
+# Verb forms only: a bare stem would also match job titles and nouns ("Sales Assistant",
+# "IT Support Analyst", "First Aid", "Contributor"), and a title moved to its own line would
+# then look like an upgraded "Helped..." bullet.
+SUPPORTING = re.compile(
+    r"(?<!\w)(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)|support(?:ed|ing|s)|contribut(?:ed|ing|es?)"
+    r"|particip(?:ated|ating|ates?|é|ée|er)|collaborat(?:ed|ing|es?)|aid(?:ed|ing)"
+    r"|aidé|aidée|aider|contribué|contribuée|collaboré|collaborée|assisté|assistée)(?!\w)", re.I)
 NUMBER = re.compile(r"(?<![\w.])[£$€]?\d+(?:[,.\u202f\u00a0 ]\d{3})*(?:[.,]\d+)?(?:\s?(?:%|\+|k\b|m\b|bn\b))?",
                     re.I)
 DATE_RE = re.compile(rf"(?<![\w.,£$€])(?:{DATE})(?!\w)", re.I)
