@@ -43,7 +43,7 @@ See `templates/keywords-example.json` for the keyword file format, and `referenc
 
 ## Privacy
 
-CVs are personal data. Everything runs locally, and the skill never uploads a CV to an online ATS checker without the person's consent. All test fixtures are fictional, and `tests/test_privacy.py` checks that tracked files contain only fictional phone numbers and `@example.com` addresses.
+CVs are personal data. Everything runs locally. Rendering is offline: Chrome runs with every network request routed to a dead proxy, and the page gets a Content-Security-Policy that blocks scripts and remote styles, fonts and images (`tests/test_offline_render.py` checks both against a local request recorder). The template uses system fonts only. The skill also the skill never uploads a CV to an online ATS checker without the person's consent. All test fixtures are fictional, and `tests/test_privacy.py` checks that tracked files contain only fictional phone numbers and `@example.com` addresses.
 
 ## Tests
 

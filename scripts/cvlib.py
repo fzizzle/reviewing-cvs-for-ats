@@ -47,6 +47,40 @@ def find_chrome():
     raise RuntimeError("No Chrome, Chromium or Edge found. Install one or set CV_ATS_CHROME.")
 
 
+# A CV holds personal data, so rendering must never touch the network or run the page's scripts.
+# Every http(s)/ws request goes to a dead proxy; "<-loopback>" removes Chrome's built-in proxy
+# bypass for localhost/127.0.0.1, and the resolver rule fails any DNS lookup that slips through.
+# The remaining flags stop Chrome's own background traffic (updates, metrics, safe browsing).
+# Scripts are blocked by the CSP that offline_copy() injects (--blink-settings=scriptEnabled=false
+# stops headless Chrome printing at all).
+# tests/test_offline_render.py checks this against a local request recorder.
+OFFLINE_FLAGS = (
+    "--proxy-server=http://127.0.0.1:9", "--proxy-bypass-list=<-loopback>",
+    "--host-resolver-rules=MAP * ~NOTFOUND",
+    "--disable-background-networking", "--disable-component-update", "--disable-sync",
+    "--disable-domain-reliability", "--disable-client-side-phishing-detection",
+    "--no-pings", "--metrics-recording-only", "--disable-features=MediaRouter,OptimizationHints",
+)
+
+
+# Second layer, inside the page: no scripts, and styles/images/fonts only from local files or inline.
+CSP = ("default-src 'none'; script-src 'none'; connect-src 'none'; style-src 'unsafe-inline' file:; "
+       "img-src file: data:; font-src file: data:; media-src 'none'; object-src 'none'; frame-src 'none'")
+
+
+def offline_copy(html_path, workdir):
+    """Copy of html_path with the CSP above as the first thing in <head>, plus a <base> so relative
+    images and stylesheets still resolve against the original folder."""
+    src = Path(html_path).read_text(encoding="utf-8", errors="replace")
+    inject = (f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
+              f'<base href="{Path(html_path).parent.as_uri()}/">')
+    m = re.search(r"<head\b[^>]*>", src, re.I)
+    out = src[:m.end()] + inject + src[m.end():] if m else inject + src
+    dest = Path(workdir) / "offline.html"
+    dest.write_text(out, encoding="utf-8")
+    return dest
+
+
 def render_pdf(html_path, pdf_path, timeout=120):
     """Print an HTML file to PDF with headless Chrome, using a throwaway browser profile.
 
@@ -65,9 +99,11 @@ def render_pdf(html_path, pdf_path, timeout=120):
     pdf_path.unlink(missing_ok=True)  # a stale PDF here makes the stable-size poll below
     # see the old file as "done" almost immediately, killing Chrome before it writes.
     with tempfile.TemporaryDirectory() as profile:
+        page = offline_copy(html_path, profile)
         proc = subprocess.Popen(
             [find_chrome(), "--headless", "--disable-gpu", "--no-pdf-header-footer",
-             f"--user-data-dir={profile}", f"--print-to-pdf={pdf_path}", html_path.as_uri()],
+             f"--user-data-dir={profile}", *OFFLINE_FLAGS,
+             f"--print-to-pdf={pdf_path}", page.as_uri()],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         deadline = time.monotonic() + timeout
         last_size, stable = -1, 0
