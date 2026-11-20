@@ -4,8 +4,14 @@
 Extracts the CV with several parsers (pypdf, pdfminer, pdfplumber, pymupdf for PDF/HTML;
 python-docx and docx-xml for .docx; raw text for .txt/.md) and scores each extraction:
 
-  parse quality /65  contact 15, sections 15, section order 10, dates 10, date placement 10,
-                     length 5, minus up to 15 for letter-spaced (garbled) text and unreadable glyphs
+  parse quality /65  contact 15 (email 5, phone 5, link 2.5, City, Country 2.5; a domestic phone format
+                     is not penalised), sections 15, section order 10, dates 10, date placement 10,
+                     length 5 (pages 2.5, 300-900 words 2.5), minus up to 15 for letter-spaced
+                     (garbled) text and unreadable glyphs. With no page count (.docx, .txt) the
+                     pages half is "not measured" and parse is rescaled from 62.5 to /65,
+                     so the same threshold applies to every format.
+                     Every lost point prints a line, grouped as extraction problems (a parser
+                     misreads the file), content suggestions, and notes (not scored).
   keywords      /35  share of advert keywords found (only with --keywords)
 
 This is a heuristic simulation, NOT a commercial ATS score. Always report it as such.
@@ -14,7 +20,10 @@ Usage: cvats score CV [--keywords KW.json] [--baseline OLD_CV] [--max-pages N] [
 
 KW.json: {"advert": "short label", "keywords": {"label": ["synonym", ...], ...}, "required": ["label", ...]}
 ("required" is optional; those labels count double in the keyword score and are reported first.)
-Synonyms match case-insensitively, across line breaks, ignoring accents and UK/US spelling (optimise/optimize, fibre/fiber, colour/color, modelling/modeling). Short synonyms (<= 4 chars) match whole words,
+Advert alternatives ("HubSpot or Marketo") are one label: {"CRM": {"any_of": {"HubSpot": ["hubspot"],
+"Marketo": ["marketo"]}}} — one weight, found when any alternative matches; the output names which.
+Synonyms match case-insensitively, across line breaks, ignoring accents and UK/US spelling (optimise/optimize, fibre/fiber, colour/color, modelling/modeling;
+French optimiser/optimisé/optimisation fold the same way). Short synonyms (<= 4 chars) match whole words,
 plural allowed: "api" matches "APIs", but "ai" does not match "Aim" and "r" does not match "Research".
 Longer synonyms match at the start of a word: "manufactur" matches "manufacturing", "ndt" never
 matches "roundtable". List "leadership" separately from "lead". Never edit KW.json to raise a score.
@@ -32,15 +41,20 @@ from layout import pdf_findings  # noqa: E402
 
 MONTH = (r"(?:january|february|march|april|may|june|july|august|september|october|november|december|"
          r"janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|"
-         r"décembre|decembre|januar|märz|juni|juli|oktober|dezember|"  # German (others match EN/FR)
+         r"décembre|decembre|januar|jänner|janner|februar|märz|maerz|juni|juli|oktober|dezember|"  # German (rest = EN/FR)
          r"enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|"
+         r"janv|févr|fevr|juill|jän|"  # French and Austrian abbreviations ("janv.", "févr.", "juill.", "Jän.")
          r"jan|feb|fév|fev|mar|mär|apr|avr|jun|jul|juil|aug|sep|sept|oct|okt|nov|dec|déc|dez|ene|abr|ago|dic)\.?")
 SEASON = (r"(?:spring|summer|autumn|fall|winter|printemps|été|ete|automne|hiver|frühling|sommer|herbst"
           r"|primavera|verano|otoño|invierno)")
 DATE = (rf"(?:{MONTH}\s+\d{{4}}|{SEASON}\s+\d{{4}}|(?:19|20)\d{{2}}-(?:0[1-9]|1[0-2])(?!\d)|\d{{1,2}}[./]\d{{4}}"
         rf"|(?:19|20)\d{{2}})")  # "Mar 2020", "Summer 2020", ISO "2020-03", "03.2020" or "3/2020", "2020"
-PRESENT = r"present|current|now|today|aujourd'hui|présent|en\s+cours|heute|aktuell|actualidad|presente"
-RANGE = re.compile(rf"(?<!\w)({DATE})\s*(?:–|—|-|to|à)\s*({DATE}|{PRESENT})(?!\w)", re.I)
+PRESENT = (r"present|current|now|today|aujourd'hui|présent|en\s+cours|heute|aktuell|jetzt|dato|actualidad"
+           r"|presente|hoy")
+# Dash, or a word between spaces: "to", French "à"/"au", German "bis", Spanish "a"/"al"/"hasta". The
+# words need a date on both sides, so "2019 a team" is no range.
+SEP = r"\s*(?:–|—|-)\s*|\s+(?:to|à|au|bis|hasta|al|a)\s+"
+RANGE = re.compile(rf"(?<!\w)({DATE})(?:{SEP})({DATE}|{PRESENT})(?!\w)", re.I)
 YEAR_ONLY = re.compile(r"(?:19|20)\d{2}")
 
 SECTIONS = {  # checked in this order; first match wins
@@ -104,8 +118,13 @@ PARTICLES = {"van", "der", "den", "de", "del", "della", "von", "da", "di", "du",
 NOT_A_NAME = re.compile(r"\b(?:cv|curriculum|vitae|r[ée]sum[ée]|lebenslauf|profile|contact)\b", re.I)
 
 FOLDS = [  # UK -> US spelling, applied to the CV text and the synonyms alike
-    (re.compile(r"(?<=\w\w)is(e|ed|es|ing|ation|ations)\b"), r"iz\1"),   # optimise, organisation
-    (re.compile(r"(?<=\w\w)ys(e|ed|es|ing)\b"), r"yz\1"),                # analyse
+    # "-iser"/"-izer" (UK/US agent nouns, French infinitives) fold to "-ize", so "optimiser",
+    # "optimizer", "optimisé" and "optimize" share the stem "optimize"
+    (re.compile(r"(?<=\w\w)([iy])[sz]er(s?)\b"), r"\1ze\2"),         # optimiser, analyser, organizer
+    (re.compile(r"(?<=\w\w)is(?=(?:e|ed|es|ee|ees|ing|ant|ants)\b|at(?:ion|eur|rice))"), "iz"),
+    #                                                        optimise(d), optimisée(s), organisation(al), -isateur
+    (re.compile(r"(?<=\w\w)ys(?=(?:e|ed|es|ee|ees|ing|ant|ants)\b)"), "yz"),         # analyse, analysé
+    (re.compile(r"(?<=\w\w\w)is(t|m)e(s?)\b"), r"is\1\2"),           # French spécialiste, journalisme
     (re.compile(r"(?<=\w\w\w)our(s|ed|ing)?\b"), r"or\1"),               # colour, behaviour (not hour, your)
     (re.compile(r"(?<=\w\w)([bt])re(s?)\b"), r"\1er\2"),                 # fibre, centre, metre
     (re.compile(r"(?<=e)ll(ed|ing|er|ers)\b"), r"l\1"),                  # modelling, travelled
@@ -130,7 +149,9 @@ def fold(text):
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 PHONE = re.compile(r"\+?\d[\d\s().-]{6,}\d")
 LINK = re.compile(r"linkedin\.com/|github\.com/|https?://|www\.", re.I)
-CONTACT_WEIGHTS = {"email": 5, "phone": 3, "international_phone": 2, "link": 2.5, "location": 2.5}
+# No weight for "international_phone": a domestic number is fine, and adding "+CC" the person never
+# gave is a fidelity problem. contact_checks() still reports it (fidelity.py relies on it).
+CONTACT_WEIGHTS = {"email": 5, "phone": 5, "link": 2.5, "location": 2.5}
 COLS = ["total", "parse", "keywords", "contact", "sections", "order", "dates", "placement", "length", "penalty", "words"]
 
 
@@ -141,21 +162,37 @@ def _synonym_pattern(syn):
     return r"(?<!\w)" + esc + r"s?(?!\w)" if len(syn) <= 4 else r"(?<!\w)" + esc
 
 
-def keyword_hits(text, keywords):
+def alternatives(spec):
+    """{alternative: [synonym, ...]} for an {"any_of": {...}} label, or {None: synonyms} for a plain list."""
+    return spec["any_of"] if isinstance(spec, dict) else {None: spec}
+
+
+def keyword_matches(text, keywords):
+    """{label: [alternatives that match]}; a plain synonym-list label that matches gives [None]."""
     low = fold(text)  # line breaks become spaces
-    return {label: any(re.search(_synonym_pattern(s), low) for s in syns)
-            for label, syns in keywords.items()}
+    return {label: [alt for alt, syns in alternatives(spec).items()
+                    if any(re.search(_synonym_pattern(s), low) for s in syns)]
+            for label, spec in keywords.items()}
+
+
+def keyword_hits(text, keywords):
+    """{label: found}. An "any_of" label is found when any one of its alternatives matches."""
+    return {label: bool(found) for label, found in keyword_matches(text, keywords).items()}
 
 
 LIST_ONLY = {"header", "profile", "skills", "languages", "interests"}  # places that claim, not show
 
 
 def keyword_places(text, keywords):
-    """{label: set of sections where a synonym matches}. Lines before the first heading are 'header'."""
+    """{label: set of sections where a synonym matches}. Lines before the first heading are 'header'.
+
+    The header ends at the first known section heading: an ALL-CAPS name ("ALEX MORGAN") or tagline
+    reads as an unknown heading ('other'), and must not move header keywords out of the header.
+    """
     blocks, current = {}, "header"
     for line in text.splitlines():
         key = heading_key(line)
-        if key:
+        if key and not (current == "header" and key == "other"):
             current = key
             continue
         blocks.setdefault(current, []).append(line)
@@ -171,7 +208,9 @@ def load_keywords(path):
     """Read and check a keyword file. Returns (keywords, advert, required).
 
     Format: {"advert": "label", "keywords": {"label": ["synonym", ...]}, "required": ["label", ...]}.
-    "required" is optional: required labels count double and are reported first.
+    A label can instead hold advert alternatives, {"any_of": {"HubSpot": ["hubspot"], "Marketo": ["marketo"]}}:
+    one weight, found when any alternative matches. "required" is optional: required labels count
+    double and are reported first.
     """
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -180,8 +219,17 @@ def load_keywords(path):
     kw = data.get("keywords") if isinstance(data, dict) else None
     if not isinstance(kw, dict) or not kw:
         raise ValueError(f'{path}: needs a non-empty "keywords" object: {{"label": ["synonym", ...]}}')
-    for label, syns in kw.items():
-        if not isinstance(syns, list) or not syns or not all(isinstance(s, str) and s.strip() for s in syns):
+    def synonyms_ok(syns):
+        return isinstance(syns, list) and syns and all(isinstance(s, str) and s.strip() for s in syns)
+
+    for label, spec in kw.items():
+        if isinstance(spec, dict):
+            alts = spec.get("any_of")
+            if (set(spec) != {"any_of"} or not isinstance(alts, dict) or len(alts) < 2
+                    or not all(synonyms_ok(v) for v in alts.values())):
+                raise ValueError(f'{path}: keyword "{label}" needs {{"any_of": {{"alternative": ["synonym", ...], ...}}}} '
+                                 "with at least two alternatives, each a list of synonym strings")
+        elif not synonyms_ok(spec):
             raise ValueError(f'{path}: keyword "{label}" needs a list of synonym strings, e.g. ["{label.lower()}"]')
     required = data.get("required", [])
     if not isinstance(required, list) or any(r not in kw for r in required):
@@ -281,23 +329,31 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
     garbled = GARBLED.findall(text)
     unreadable = len(UNREADABLE.findall(text))
     r = {
-        "contact": sum(CONTACT_WEIGHTS[k] for k, v in contact.items() if v),
+        "contact": sum(w for k, w in CONTACT_WEIGHTS.items() if contact[k]),
         "sections": round(15 * (len(REQUIRED) - len(missing_sections)) / len(REQUIRED), 1),
         "order": (10 if len(seq) >= 2 else 5) if order_consistent else 0,
         "dates": round(5 * min(1, len(ranges) / max(expected_dates, 1)) + 5 * len(monthly) / len(ranges), 1) if ranges else 0,
         "placement": round(10 * ok / (ok + len(misplaced)), 1) if ok + len(misplaced) else 0,
-        "length": (2.5 if pages is None or pages <= max_pages else 0) + (2.5 if 300 <= words <= 900 else 0),
+        # An unknown page count (.docx, .txt) is neither awarded nor deducted: it leaves the scale.
+        "length": (2.5 if pages is not None and pages <= max_pages else 0) + (2.5 if 300 <= words <= 900 else 0),
+        "parse_max": 65 if pages is not None else 62.5, "max_pages": max_pages,
+        "date_ranges": len(ranges), "monthly_dates": len(monthly), "expected_dates": max(expected_dates, 1),
         "penalty": min(3 * len(garbled) + min(unreadable, 10), 15),
         "words": words, "pages": pages, "garbled": garbled, "unreadable": unreadable, "sequence": seq,
         "missing_sections": missing_sections, "misplaced_dates": misplaced,
-        "missing_contact": [k for k, v in contact.items() if not v],
+        "missing_contact": [k for k in CONTACT_WEIGHTS if not contact[k]],
+        "international_phone": contact["international_phone"],
         "name_line": first_line_is_name(text),
         "first_line": next((line.strip() for line in text.splitlines() if line.strip()), ""),
     }
-    r["parse"] = round(max(0.0, r["contact"] + r["sections"] + r["order"] + r["dates"]
-                           + r["placement"] + r["length"] - r["penalty"]), 1)
+    raw = max(0.0, r["contact"] + r["sections"] + r["order"] + r["dates"]
+              + r["placement"] + r["length"] - r["penalty"])
+    r["parse"] = round(raw * 65 / r["parse_max"], 1)  # unmeasured pages: rescale 62.5 -> 65
+    r["any_of_matched"] = {}
     if keywords:
-        hits = keyword_hits(text, keywords)
+        matches = keyword_matches(text, keywords)
+        hits = {k: bool(v) for k, v in matches.items()}
+        r["any_of_matched"] = {k: v for k, v in matches.items() if v and isinstance(keywords[k], dict)}
         weight = {k: 2 if k in required else 1 for k in hits}
         r["keywords"] = round(35 * sum(weight[k] for k, found in hits.items() if found) / sum(weight.values()), 1)
         r["total"] = round(r["parse"] + r["keywords"], 1)
@@ -308,6 +364,7 @@ def score_text(text, pages, *, keywords=None, expected_dates=1, order_consistent
         r["keywords"] = r["total"] = None
         r["missing_keywords"] = []
         r["listed_only_keywords"] = []
+    r["any_of"] = {k: list(spec["any_of"]) for k, spec in (keywords or {}).items() if isinstance(spec, dict)}
     r["required"] = [k for k in required if keywords and k in keywords]
     r["missing_required"] = [k for k in r["missing_keywords"] if k in required]
     return r
@@ -323,6 +380,7 @@ def score_cv(path, keywords=None, max_pages=2, required=()):
     for n, r in rows.items():
         r["ligatures"] = texts.ligatures.get(n, 0)
         r["layout"] = list(texts.pdf_findings)
+        r["parser_errors"] = dict(texts.parser_errors)
     if str(path).lower().endswith(".docx"):
         hf, boxed = docx_header_footer_text(path), docx_textbox_text(path)
         for r in rows.values():
@@ -340,24 +398,58 @@ def table(title, rows):
     return "\n".join(out)
 
 
+def _pts(x):
+    return f"-{x:g}"
+
+
+def row_findings(r):
+    """(kind, message) for one parser's row; kind is "extraction" (the file or a parser misreads the CV),
+    "content" (what the CV says: fix only with facts the person gives) or "note" (not scored).
+    Every point a correctly extracted CV loses has a message here."""
+    if r["missing_sections"]:
+        yield "extraction", f"section headings not recognised: {', '.join(r['missing_sections'])}"
+    if r["garbled"]:
+        yield "extraction", f"letter-spaced text read as separate letters: {r['garbled'][:3]}"
+    if r.get("unreadable"):
+        yield "extraction", (f"{r['unreadable']} unreadable glyph{'s' if r['unreadable'] != 1 else ''} (icon-font symbols, or a font with no text map): "
+                             "use words ('Email:', 'Phone:') instead of icons and standard fonts")
+    if r["misplaced_dates"]:
+        yield "extraction", f"dates landed under the wrong section: {r['misplaced_dates']}"
+    if r.get("ligatures"):
+        yield "extraction", (f"extracted {r['ligatures']} ligature glyph(s) (e.g. one glyph for 'fi'); "
+                             "add font-variant-ligatures: none")
+    no_text = r["words"] < MIN_WORDS
+    n, monthly, expected = r.get("date_ranges", 0), r.get("monthly_dates", 0), r.get("expected_dates", 1)
+    if not no_text:
+        if n == 0:
+            yield "content", "no date ranges found ('Mon YYYY – Mon YYYY' or 'Present'): -10 dates"
+        else:
+            if n < expected:
+                yield "extraction", f"found {n} of {expected} date ranges other parsers found: {_pts(round(5 - 5 * n / expected, 1))} dates"
+            if monthly < n:
+                yield "content", (f"dates are years only ({n - monthly} of {n} range{'s' if n != 1 else ''}): "
+                                  f"use 'Mon YYYY – Mon YYYY' where the person gives months, {_pts(round(5 - 5 * monthly / n, 1))} dates")
+    if r["missing_contact"]:
+        yield "content", f"contact items not found: {', '.join(r['missing_contact'])}"
+    if not r["name_line"] and not no_text:
+        yield "content", f"first line isn't a name ({r['first_line'][:40]!r}): ATS read the first line as the candidate's name"
+    pages = r.get("pages")
+    if pages is not None and pages > r.get("max_pages", 2):
+        yield "content", f"{pages} pages: over the {r.get('max_pages', 2)}-page limit, -2.5 length"
+    if not no_text and not 300 <= r["words"] <= 900:
+        yield "content", f"{r['words']} words: outside 300–900, -2.5 length"
+    if pages is None:
+        yield "note", ("page count not measured (no page layout in this format): neither awarded nor deducted, "
+                       "so parse is rescaled from 62.5 to /65; render to PDF to check pages")
+    if r.get("phone") is not False and r.get("international_phone") is False and "phone" not in r["missing_contact"]:
+        yield "note", ("phone has no international (+CC) prefix: not scored; fine at home, add one only if "
+                       "applying abroad and the person gives it")
+
+
 def row_messages(r):
     """Problem messages for one parser's row; problems() groups identical ones across parsers."""
-    if r["missing_sections"]:
-        yield f"section headings not recognised: {', '.join(r['missing_sections'])}"
-    if r["garbled"]:
-        yield f"letter-spaced text read as separate letters: {r['garbled'][:3]}"
-    if r.get("unreadable"):
-        yield (f"{r['unreadable']} unreadable glyph{'s' if r['unreadable'] != 1 else ''} (icon-font symbols, or a font with no text map): "
-               "use words ('Email:', 'Phone:') instead of icons and standard fonts")
-    if r["misplaced_dates"]:
-        yield f"dates landed under the wrong section: {r['misplaced_dates']}"
-    if r["missing_contact"]:
-        yield f"contact items not found: {', '.join(r['missing_contact'])}"
-    if not r["name_line"] and r["words"] >= MIN_WORDS:
-        yield f"first line isn't a name ({r['first_line'][:40]!r}): ATS read the first line as the candidate's name"
-    if r.get("ligatures"):
-        yield (f"extracted {r['ligatures']} ligature glyph(s) (e.g. one glyph for 'fi'); "
-               "add font-variant-ligatures: none")
+    for _, msg in row_findings(r):
+        yield msg
 
 
 def _who(names, rows):
@@ -373,11 +465,15 @@ def keyword_problems(rows):
     everywhere = [k for k, names in missed.items() if len(names) == len(rows)]
     partly = [f"{k} ({', '.join(names)})" for k, names in missed.items() if len(names) < len(rows)]
     out = []
-    required = set(next(iter(rows.values())).get("required", []))
+    first = next(iter(rows.values()))
+    required, any_of = set(first.get("required", [])), first.get("any_of", {})
+
+    def show(k):
+        return f"{k} (any of: {', '.join(any_of[k])})" if k in any_of else k
     if [k for k in everywhere if k in required]:
-        out.append("- required advert keywords not found: " + ", ".join(k for k in everywhere if k in required))
+        out.append("- required advert keywords not found: " + ", ".join(show(k) for k in everywhere if k in required))
     if [k for k in everywhere if k not in required]:
-        out.append("- advert keywords not found: " + ", ".join(k for k in everywhere if k not in required))
+        out.append("- advert keywords not found: " + ", ".join(show(k) for k in everywhere if k not in required))
     if partly:
         out.append("- advert keywords some parsers miss (a layout problem, not a gap): " + ", ".join(partly))
     listed = [k for k in rows[next(iter(rows))]["listed_only_keywords"]
@@ -388,33 +484,60 @@ def keyword_problems(rows):
     return out
 
 
-def problems(rows):
-    """Problem lines for a {parser: row} table.
+def problem_groups(rows):
+    """{"extraction": [...], "content": [...], "notes": [...]} problem lines for a {parser: row} table.
 
+    "extraction" lines mean a parser misreads the file (fix the layout, not the words); "content" lines
+    are suggestions about what the CV says (fix only with facts the person gives); "notes" cost nothing.
     A message several parsers share prints once, followed by the parsers that hit it ("all parsers"
     when every parser did), so the list stays short enough to report in full.
     """
+    groups = {"extraction": [], "content": [], "notes": []}
     empty = [name for name, r in rows.items() if r["words"] < MIN_WORDS]
-    out = [f"- {NO_TEXT} ({', '.join(empty)})"] if empty else []
-    out += [f"- {finding}" for finding in next(iter(rows.values())).get("layout", [])]
+    if empty:
+        groups["extraction"].append(f"- {NO_TEXT} ({', '.join(empty)})")
+    first = next(iter(rows.values()))
+    groups["extraction"] += [f"- {finding}" for finding in first.get("layout", [])]
+    groups["extraction"] += [f"- {name} could not read the file ({err}); scored with the other parsers"
+                             for name, err in first.get("parser_errors", {}).items()]
     grouped = {}
     for name, r in rows.items():
-        for msg in row_messages(r):
-            grouped.setdefault(msg, []).append(name)
-    out += [f"- {msg} ({_who(names, rows)})" for msg, names in grouped.items()]
+        for kind, msg in row_findings(r):
+            grouped.setdefault((kind, msg), []).append(name)
+    for (kind, msg), names in grouped.items():
+        groups["notes" if kind == "note" else kind].append(f"- {msg} ({_who(names, rows)})")
     if any(r["order"] == 0 for r in rows.values()):
         seqs = {}
         for name, r in rows.items():
             seqs.setdefault(tuple(r["sequence"]), []).append(name)
-        out.append("- parsers disagree on section order: "
-                   + "; ".join(f"{', '.join(names)} {list(seq)}" for seq, names in seqs.items()))
+        groups["extraction"].append("- parsers disagree on section order: "
+                                    + "; ".join(f"{', '.join(names)} {list(seq)}" for seq, names in seqs.items()))
     first = next(iter(rows.values()))
     if first.get("header_footer_text"):
-        out.append(f"- Word header/footer holds text many ATS skip: {first['header_footer_text']!r}")
+        groups["extraction"].append(f"- Word header/footer holds text many ATS skip: {first['header_footer_text']!r}")
     if first.get("textbox_text"):
-        out.append(f"- Word text boxes hold text many ATS skip: {first['textbox_text']!r}")
-    out += keyword_problems(rows)
-    return out
+        groups["extraction"].append(f"- Word text boxes hold text many ATS skip: {first['textbox_text']!r}")
+    for line in keyword_problems(rows):
+        groups["extraction" if "some parsers miss" in line else "content"].append(line)
+    matched = {}
+    for r in rows.values():
+        for label, alts in r.get("any_of_matched", {}).items():
+            matched.setdefault(label, set()).update(alts)
+    if matched:
+        groups["notes"].append("- either-or advert keywords (one is enough): "
+                               + "; ".join(f"{k} via {', '.join(sorted(v))}" for k, v in matched.items()))
+    return groups
+
+
+def problems(rows):
+    """All problem lines: extraction problems, then content suggestions, then notes (see problem_groups)."""
+    g = problem_groups(rows)
+    return g["extraction"] + g["content"] + g["notes"]
+
+
+GROUP_TITLES = {"extraction": "Extraction problems (a parser misreads the file: fix layout, not words):",
+                "content": "Content suggestions (change only with facts the person confirms):",
+                "notes": "Notes (not scored):"}
 
 
 @cli
@@ -440,8 +563,11 @@ def main(argv=None):
         if key in report:
             print()
             print(table(title, report[key]))
-            for line in problems(report[key]):
-                print(line)
+            for kind, lines in problem_groups(report[key]).items():
+                if lines:
+                    print(GROUP_TITLES[kind])
+                    for line in lines:
+                        print(line)
     return 0
 
 

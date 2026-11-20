@@ -174,3 +174,20 @@ def test_non_latin_words_are_counted():
 
 def test_word_keeps_polish_letters_and_programming_names():
     assert repeats.WORD.findall("zarządzanie c++ c#") == ["zarządzanie", "c++", "c#"]
+
+
+def test_allow_items_are_stripped_and_can_be_phrases(tmp_path, capsys):
+    text = "Python, SQL, Power BI. Python, SQL, Power BI. " + " ".join(f"word{i}" for i in range(40))
+    assert repeats.repeated_phrases(text, allow=["python", "sql", "power bi"]) == []
+    f = tmp_path / "cv.txt"
+    f.write_text("• Built x\n• Made y\n" + text, encoding="utf-8")
+    assert repeats.main([str(f), "--allow", "Python, SQL , Power BI"]) == 0
+    assert "repeated 3-word phrases: none" in capsys.readouterr().out
+
+
+def test_french_filler_is_not_a_repeat():
+    # Without French stopwords, "pour le client" and "a été" padding read as repeated phrases.
+    text = "Analyse des ventes pour le client. Il a été promu. Suivi des achats pour le client. Elle a été formée."
+    assert repeats.repeated_phrases(text) == []
+    assert repeats.repeated_phrases("Pilotage de la production client. Pilotage des productions du client. "
+                                    "Pilotage de la production client.") == ["pilotage production client"]

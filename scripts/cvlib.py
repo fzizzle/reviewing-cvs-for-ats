@@ -95,9 +95,28 @@ def render_pdf(html_path, pdf_path, timeout=120):
     browser ourselves. This relies on Chrome writing the PDF in a single burst rather than
     incrementally; the reviewer observed that hold even for a 280-page PDF.
     """
-    html_path, pdf_path = Path(html_path).resolve(), Path(pdf_path).resolve()
-    pdf_path.unlink(missing_ok=True)  # a stale PDF here makes the stable-size poll below
-    # see the old file as "done" almost immediately, killing Chrome before it writes.
+    html_path, dest = Path(html_path).resolve(), Path(pdf_path).resolve()
+    if dest == html_path:
+        raise ValueError(f"Output {dest} is the input file; choose a different PDF path.")
+    if not html_path.is_file():
+        raise ValueError(f"No such file: {html_path}")
+    # Chrome writes to a fresh temporary file beside the destination; the destination is only
+    # replaced once that file is a complete PDF, so a failed render never loses an existing PDF.
+    # (A fresh path also keeps the stable-size poll below from mistaking an old PDF for "done".)
+    pdf_path = dest.with_name(f".{dest.stem}.{os.getpid()}.rendering.pdf")
+    pdf_path.unlink(missing_ok=True)
+    try:
+        _render_to(html_path, pdf_path, timeout)
+        with open(pdf_path, "rb") as fh:
+            if fh.read(5) != b"%PDF-":
+                raise RuntimeError(f"Chrome wrote something that is not a PDF for {html_path}")
+        os.replace(pdf_path, dest)
+    finally:
+        pdf_path.unlink(missing_ok=True)
+    return dest
+
+
+def _render_to(html_path, pdf_path, timeout):
     with tempfile.TemporaryDirectory() as profile:
         page = offline_copy(html_path, profile)
         proc = subprocess.Popen(
@@ -125,9 +144,8 @@ def render_pdf(html_path, pdf_path, timeout=120):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.wait(timeout=5)
-    if not pdf_path.exists():
-        raise RuntimeError(f"Chrome did not write {pdf_path}")
-    return pdf_path
+    if not pdf_path.exists() or pdf_path.stat().st_size == 0:
+        raise RuntimeError(f"Chrome did not write a PDF for {html_path}")
 
 
 def _pypdf(p):
@@ -249,9 +267,11 @@ LIGATURES = re.compile("[\ufb00-\ufb06]")  # ff, fi, fl, ffi, ffl, long-st, st l
 
 class Extracted(dict):
     """{parser: text}, plus .ligatures = {parser: ligature glyphs found before normalising} and
-    .pdf_findings = what extract_all's pdf_hook returned for the rendered PDF ([] without one)."""
+    .pdf_findings = what extract_all's pdf_hook returned for the rendered PDF ([] without one).
+    .parser_errors = {parser: message} for parsers that failed on this file ({} if none)."""
     ligatures = {}
     pdf_findings = []
+    parser_errors = {}
 
 
 def normalise(texts):
@@ -264,7 +284,24 @@ def normalise(texts):
     prior = getattr(texts, "ligatures", {})
     out.ligatures = {n: prior.get(n, 0) + len(LIGATURES.findall(t)) for n, t in texts.items()}
     out.pdf_findings = getattr(texts, "pdf_findings", [])
+    out.parser_errors = dict(getattr(texts, "parser_errors", {}))
     return out
+
+
+def _run_parsers(parsers, path):
+    """Run each parser on path; one failing parser must not hide what the others extracted.
+    Failures go in .parser_errors; only if every parser fails is the file treated as unreadable."""
+    texts, errors = Extracted(), {}
+    for name, fn in parsers.items():
+        try:
+            texts[name] = fn(str(path))
+        except Exception as err:  # noqa: BLE001 - parser libraries raise their own exception types
+            errors[name] = f"{type(err).__name__}: {err}".strip()
+    if not texts:
+        detail = "; ".join(f"{n}: {e}" for n, e in errors.items())
+        raise ValueError(f"Could not read {Path(path).name} with any parser ({detail})")
+    texts.parser_errors = errors
+    return texts
 
 
 def extract_all(path, pdf_hook=None):
@@ -278,12 +315,14 @@ def extract_all(path, pdf_hook=None):
     if ext not in (".pdf", ".html", ".htm", ".docx", ".txt", ".md"):
         raise ValueError(f"Unsupported CV format '{ext}'. Use .pdf, .html, .docx, .txt or .md "
                          "(save pasted text as .txt).")
+    if not path.is_file():
+        raise ValueError(f"No such file: {path}")
     with tempfile.TemporaryDirectory() as work:
         pdf = as_pdf(path, work)
         if pdf is not None:
-            texts = normalise({name: fn(str(pdf)) for name, fn in PDF_PARSERS.items()})
+            texts = normalise(_run_parsers(PDF_PARSERS, pdf))
             texts.pdf_findings = pdf_hook(pdf) if pdf_hook else []
             return texts, page_count(pdf)
     if ext == ".docx":
-        return normalise({"python-docx": docx_text(path), "docx-xml": docx_xml_text(path)}), None
+        return normalise(_run_parsers({"python-docx": docx_text, "docx-xml": docx_xml_text}, path)), None
     return normalise({"text": path.read_text(encoding="utf-8")}), None

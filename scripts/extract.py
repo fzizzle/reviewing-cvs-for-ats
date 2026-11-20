@@ -20,6 +20,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     texts, pages = extract_all(a.cv)
     print(f"pages: {pages if pages is not None else 'n/a'}")
+    for name, err in texts.parser_errors.items():
+        print(f"WARNING: {name} could not read the file ({err}); showing the other parsers")
     for name, text in texts.items():
         print(f"{name:12} {len(text.split()):5} words")
         if a.out:

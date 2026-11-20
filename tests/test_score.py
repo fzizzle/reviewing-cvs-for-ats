@@ -166,13 +166,16 @@ def test_german_and_iso_months_are_ranges():
     assert score.RANGE.search("Chicago 2019") is None
 
 
-def test_keyword_example_keeps_one_tool_per_label():
+def test_keyword_example_keeps_one_tool_per_alternative():
+    # The advert says "HubSpot or Salesforce Marketing Cloud": one any_of label, one alternative per
+    # tool, so the output names the tool that matched instead of an OR-merged synonym list.
     import json
     import pathlib
     path = pathlib.Path(__file__).resolve().parents[1] / "templates" / "keywords-example.json"
     kw = json.loads(path.read_text(encoding="utf-8"))["keywords"]
-    assert kw["HubSpot"] == ["hubspot"] and kw["Salesforce Marketing Cloud"] == ["salesforce"]
-    assert not any("/" in label and "A/B" not in label for label in kw)  # no OR-merged tool labels
+    alts = kw["HubSpot or Salesforce Marketing Cloud"]["any_of"]
+    assert alts["HubSpot"] == ["hubspot"] and "salesforce" in alts["Salesforce Marketing Cloud"]
+    assert not any("/" in label and "A/B" not in label for label in kw)  # no slash-merged tool labels
 
 
 def test_percentage_is_not_an_international_prefix():
@@ -356,3 +359,147 @@ def test_unreadable_glyphs_cost_points():
     assert icons["unreadable"] == 2 and icons["penalty"] == clean["penalty"] + 2
     assert cid["unreadable"] == 18 and cid["penalty"] == 10 and cid["words"] == clean["words"]
     assert any("unreadable glyphs" in line for line in score.problems({"a": icons}))
+
+
+# --- domestic phone formats are not penalised -------------------------------------------------
+
+def test_domestic_phone_scores_the_same_as_international():
+    intl = score.score_text(FULL, 1)
+    domestic = score.score_text(FULL.replace("+33 6 39 98 12 34", "020 7946 0123"), 1)
+    assert domestic["contact"] == intl["contact"] == 15
+    assert "international_phone" not in domestic["missing_contact"]
+    assert not any("contact items not found" in line for line in score.problems({"a": domestic}))
+
+
+def test_contact_checks_still_reports_international_phone_for_fidelity():
+    assert score.contact_checks("Sam Taylor\n+44 7700 900123")["international_phone"] is True
+    assert score.contact_checks("Sam Taylor\n07700 900123")["international_phone"] is False
+
+
+# --- any_of: advert alternatives ("HubSpot or Salesforce Marketing Cloud") ----------------------
+
+ANY_OF = {"CRM platform": {"any_of": {"HubSpot": ["hubspot"], "Salesforce Marketing Cloud": ["salesforce"]}},
+          "SQL": ["sql"]}
+
+
+def test_any_of_label_is_satisfied_by_one_alternative_and_weighs_once():
+    text = "EXPERIENCE\nRan campaigns in HubSpot\nEDUCATION\nBA\nSKILLS\nExcel"
+    r = score.score_text(text, 1, keywords=ANY_OF)
+    assert r["keywords"] == 17.5 and r["missing_keywords"] == ["SQL"]
+    assert r["any_of_matched"] == {"CRM platform": ["HubSpot"]}
+    assert score.keyword_hits(text, ANY_OF) == {"CRM platform": True, "SQL": False}
+    assert "- either-or advert keywords (one is enough): CRM platform via HubSpot" in score.problems({"a": r})
+
+
+def test_any_of_label_missing_lists_its_alternatives():
+    r = score.score_text("EXPERIENCE\nUsed SQL\nEDUCATION\nBA\nSKILLS\nExcel", 1, keywords=ANY_OF)
+    assert r["missing_keywords"] == ["CRM platform"]
+    assert ("- advert keywords not found: CRM platform (any of: HubSpot, Salesforce Marketing Cloud)"
+            in score.problems({"a": r}))
+
+
+def test_any_of_loads_and_is_validated(tmp_path):
+    kw, _, required = score.load_keywords(_kw_file(tmp_path, {"keywords": ANY_OF, "required": ["CRM platform"]}))
+    assert kw == ANY_OF and required == ("CRM platform",)
+    for bad in ({"CRM": {"any_of": []}}, {"CRM": {"any_of": {"HubSpot": []}}}, {"CRM": {"oneof": {"A": ["a"]}}}):
+        with pytest.raises(ValueError, match='keyword "CRM"'):
+            score.load_keywords(_kw_file(tmp_path, {"keywords": bad}))
+
+
+def test_any_of_works_in_keyword_places():
+    text = "Sam Taylor\nEXPERIENCE\nAnalyst\nEDUCATION\nBSc\nSKILLS\nHubSpot"
+    assert score.keyword_places(text, ANY_OF)["CRM platform"] == {"skills"}
+
+
+# --- ALL-CAPS name line stays in the header ------------------------------------------------------
+
+def test_caps_name_does_not_end_the_header():
+    text = ("ALEX MORGAN\nData Analyst · SQL · Tableau\nalex@example.com\n"
+            "EXPERIENCE\nAnalyst\nBuilt reports\nEDUCATION\nBSc\nSKILLS\nExcel")
+    kw = {"SQL": ["sql"], "Tableau": ["tableau"]}
+    assert score.keyword_places(text, kw) == {"SQL": {"header"}, "Tableau": {"header"}}
+    assert score.score_text(text, 1, keywords=kw)["listed_only_keywords"] == ["SQL", "Tableau"]
+    assert score.heading_key("ALEX MORGAN") == "other"  # unchanged for other callers
+
+
+def test_unknown_caps_heading_after_a_section_still_switches():
+    text = "Sam Taylor\nEXPERIENCE\nAnalyst\nCAREER NOTES\nUsed SQL daily"
+    assert score.keyword_places(text, {"SQL": ["sql"]})["SQL"] == {"other"}
+
+
+# --- non-English dates ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text", [
+    "Februar 2020 – März 2021", "Maerz 2019 bis heute", "Jänner 2018 bis Dezember 2019", "Okt. 2018 bis Dez. 2019",
+    "janv. 2020 – févr. 2021", "fevr 2020 - juil. 2021", "avr. 2019 au déc. 2020", "sept. 2019 – juill. 2020",
+    "enero 2019 hasta actualidad", "ene. 2019 a dic. 2020", "03.2019 a 05.2020", "marzo 2020 al presente",
+])
+def test_more_non_english_ranges(text):
+    assert score.RANGE.fullmatch(text), text
+
+
+@pytest.mark.parametrize("text", ["2019 a team of five", "Analyst a 2020", "Mar 2020a"])
+def test_spanish_a_needs_a_date_on_both_sides(text):
+    m = score.RANGE.search(text)
+    assert m is None or m.group(0) != text
+
+
+# --- French -iser/-isé/-isation/-iste folding ----------------------------------------------------
+
+@pytest.mark.parametrize("text, syn", [
+    ("Optimiser les coûts", "optimize"), ("procédé optimisé", "optimiser"), ("optimisation des flux", "optimization"),
+    ("Pièces optimisées", "optimiser"), ("Analyser les données", "analyse"), ("Spécialiste qualité", "specialist"),
+    ("organiser des ateliers", "organize"), ("Optimisations", "optimization"), ("Organisateur", "organizateur"),
+    ("optimized pricing", "optimise"), ("Organisational change", "organizational"), ("UK organiser", "organizer"),
+])
+def test_french_and_english_folding_agree(text, syn):
+    assert score.keyword_hits(text, {"k": [syn]}) == {"k": True}
+
+
+def test_folding_keeps_plural_short_synonyms():
+    assert score.keyword_hits("KPIs and APIs", {"kpi": ["kpi"], "api": ["api"]}) == {"kpi": True, "api": True}
+    assert score.keyword_hits("statistical comparisons", {"k": ["comparison"]}) == {"k": True}
+
+
+# --- every parse deduction says why; unknown page count is "not measured" ---------------------
+
+PADDED = FULL + "\n" + "word " * 400  # 300–900 words
+
+
+def test_years_only_dates_and_word_count_are_explained():
+    short = score.score_text(FULL.replace("Jan 2020 – Mar 2021", "2020 – 2021") + "\nword" * 30, 1)
+    msgs = list(score.row_messages(short))
+    assert any(m.startswith("dates are years only (1 of 1 range)") for m in msgs), msgs
+    assert any(m.startswith(f"{short['words']} words: outside 300–900") for m in msgs), msgs
+    assert not any("words: outside" in m for m in score.row_messages(score.score_text(PADDED, 1)))
+
+
+def test_no_dates_and_too_many_pages_are_explained():
+    r = score.score_text(PADDED.replace("Jan 2020 – Mar 2021", ""), 3, max_pages=2)
+    msgs = list(score.row_messages(r))
+    assert any(m.startswith("no date ranges found") for m in msgs), msgs
+    assert any(m.startswith("3 pages: over the 2-page limit") for m in msgs), msgs
+
+
+def test_fewer_dates_than_other_parsers_is_explained():
+    r = score.score_text(PADDED, 1, expected_dates=2)
+    assert any(m.startswith("found 1 of 2 date ranges") for m in score.row_messages(r))
+
+
+def test_unknown_page_count_is_not_measured_not_full_marks():
+    known, unknown = score.score_text(PADDED, 1), score.score_text(PADDED, None)
+    assert known["length"] == 5 and known["parse_max"] == 65
+    assert unknown["length"] == 2.5 and unknown["parse_max"] == 62.5
+    # The unmeasured half neither earns nor costs points: the rest is rescaled to /65.
+    assert unknown["parse"] == round((known["parse"] - 2.5) * 65 / 62.5, 1)
+    assert any("page count not measured" in line for line in score.problems({"a": unknown}))
+
+
+def test_extraction_problems_are_separate_from_content_suggestions():
+    rows = {"a": score.score_text(NO_CITY.replace("Engineer", "E N G I N E E R"), 1, keywords=KW)}
+    groups = score.problem_groups(rows)
+    assert any("letter-spaced" in line for line in groups["extraction"])
+    assert any("contact items not found" in line for line in groups["content"])
+    assert any("advert keywords not found" in line for line in groups["content"])
+    assert not any("letter-spaced" in line for line in groups["content"])
+    assert score.problems(rows) == groups["extraction"] + groups["content"] + groups["notes"]

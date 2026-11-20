@@ -227,7 +227,11 @@ def check(pdf_path, max_pages=2, min_body_pt=9.5):
         p.append(f"{pages} pages (max {max_pages})")
     if body < min_body_pt:
         p.append(f"body text {body}pt is below {min_body_pt}pt (most CV guidance: 10–11pt)")
-    if abs(report["margins_mm"]["left"] - report["margins_mm"]["right"]) > 3:
+    # The right margin is measured to the longest line, so left-aligned (ragged-right) text always
+    # looks a little wider on the right. Flag text pushed right of centre (right < left) at 3mm,
+    # but a wider right side only beyond 10mm, where it means the content box itself is off-centre.
+    lr = report["margins_mm"]["right"] - report["margins_mm"]["left"]
+    if lr < -3 or lr > 10:
         p.append(f"left/right margins differ: {report['margins_mm']}")
     if pages == 1 and report["last_page_empty_pct"] > 20:
         p.append(f"page is {report['last_page_empty_pct']}% empty at the bottom: room for larger text or spacing")

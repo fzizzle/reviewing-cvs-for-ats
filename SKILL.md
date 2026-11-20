@@ -1,6 +1,6 @@
 ---
 name: reviewing-cvs-for-ats
-description: Use when someone asks to review, shorten, tighten, rewrite, tailor or ATS-test a CV or résumé/resume, says it is too long or dense, asks why applications get no interviews, wants it matched to a job advert, or wants applicant tracking system (ATS) scores — any industry or country, from PDF, Word, HTML or pasted text.
+description: Use when someone asks to review, shorten, tighten, rewrite, tailor or ATS-test a CV or résumé/resume, says it is too long or dense, asks whether their CV is why applications get no interviews, wants it matched to a job advert, or wants applicant tracking system (ATS) scores — any industry or country, from PDF, Word, HTML or pasted text.
 ---
 
 # Reviewing CVs for ATS
@@ -11,12 +11,17 @@ Never invent a fact. Scripts in `scripts/` measure and render — don't write yo
 `CVATS=~/.claude/skills/reviewing-cvs-for-ats/scripts/cvats`. Commands: `render`, `extract`, `score`, `repeats`, `layout`, `fidelity` (`--help` each).
 
 ## Workflow
-1. **Intake** ([reference/intake.md](reference/intake.md)): role, industry, job type/timing, country, an advert. Can't ask? State each as an assumption, not a silent decision.
+Do only the branch asked for:
+- **Review** (feedback): steps 1–3; report scores, `problems` lines, top issues.
+- **Test** (scores): step 2, plus 4 with an advert (none → skip keywords, say so); report per step 7, minus before/after.
+- **Rewrite** (shorten, tailor): every step.
+
+1. **Intake** ([reference/intake.md](reference/intake.md)): ask only what the branch needs (role, industry, job type/timing, country, an advert). Can't ask? State each as an assumption, not a silent decision.
 2. **Baseline.** Never write to the original's path. New files (`kw.json`, new CV, PDF) go beside it under a different stem, case-insensitively (`foo.pdf`/`Foo.PDF` collide). Save pasted text as `.txt`. Run `score`, `repeats`, `layout` (PDF/HTML).
 3. **Feedback** ([reference/feedback-rubric.md](reference/feedback-rubric.md)): top 3–5 issues.
 4. **Keyword file.** Write requirements to `kw.json` ([reference/ats-rules.md](reference/ats-rules.md)); freeze it.
 5. **Rewrite** into a copy of `templates/cv-template.html`, per ats-rules.md. Profile = target + value, no body facts. Each fact once, in its strongest bullet, in the CV's own words and numbers. Any advert word, phrase, threshold or relabelling the CV doesn't already say ("demand generation", "3+ direct reports") is a gap, not a tagline or skill.
-6. **Iterate.** After *every* edit rerun `render`, `layout`, `repeats`, `score`, `fidelity` — an unrendered edit is unchecked. Pass = exit code 0, not a summary: loop until `layout`, `repeats` (`--allow` real skills) and `fidelity` exit 0, and parse ≥ 60 where facts allow.
+6. **Iterate.** After *every* edit rerun `render`, `layout`, `repeats`, `score`, `fidelity` — an unrendered edit is unchecked. Pass = exit code 0, not a summary: loop until `layout`, `repeats` (`--allow` real skills) and `fidelity` exit 0, and parse ≥ 60 where facts allow (every format is scored /65).
 7. **Report**, in this order:
    - Before/after table from `$CVATS score new.html --keywords kw.json --baseline original`, labelled "local ATS simulation".
    - Final `layout`/`repeats`/`fidelity` lines and exit codes, verbatim.

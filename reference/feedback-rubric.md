@@ -11,7 +11,7 @@ Lead with the 3–5 highest-impact issues, then list the rest. For each: what, w
 | Evidence | Duties without outcomes | Add numbers the person confirms: size, time, money, %, volume |
 | Jargon | Internal tool or team names outsiders can't read | Explain in plain words, keep the name in brackets |
 | Order | Old or irrelevant roles above relevant ones; students without current studies first | Reverse-chronological within sections; current study first for students |
-| Contact | No city; phone without an international prefix when applying abroad; no LinkedIn | "City, Country · +CC number · email · LinkedIn" (only items they gave you) |
+| Contact | No city; no LinkedIn; a domestic phone format when applying abroad (not scored, and fine at home) | "City, Country · phone · email · LinkedIn" (only items they gave you; add "+CC" only if they give it) |
 | Languages | "Intermediate" in European markets | CEFR level, and say if it's self-assessed |
 
 Close every feedback message with open questions: facts that only the person can confirm.
